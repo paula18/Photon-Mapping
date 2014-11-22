@@ -319,7 +319,8 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
   }
 }
 
-__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths, Path* lightPaths){
+__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths,
+	Path* lightPaths){
   // index into array is based off pixel position
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -327,17 +328,37 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-    for (int i = 0; i < traceDepth; i++){
-      if (eyePaths[index].vert[i].isValid != 0){
-        if(eyePaths[index].vert[i].hitLight == 1){
-          //change weight calculation when we add other materials
-          float weight = imageWeights[index];
-          float denom  = weight + 1.0f;
-          colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[i].colorAcc * (1.0f /denom);
-          imageWeights[index] = denom;
+   // for (int i = 0; i < traceDepth; i++){
+      int idx = traceDepth - 1; // off by one 
+      if (eyePaths[index].vert[idx].isValid != 0 && lightPaths[0].vert[idx].isValid != 0){
+      	//Start by connecting first lightpath to last vertex of eye path 
+		  ray r; 
+		  r.origin = eyePaths[index].vert[idx].position; 
+		  r.direction = lightPaths[0].vert[idx].position - eyePaths[index].vert[idx].position;
+
+		  //check intersection of this ray with scene
+
+			float distToIntersect = FLT_MAX;//infinite distance
+			float tmpDist;
+			glm::vec3 tmpIntersectPoint, tmpIntersectNormal, intersectPoint, intersectNormal;
+			material mat;
+    
+			for(int i = 0; i < numberOfGeoms; i++){
+				if (geoms[i].type == SPHERE){
+					tmpDist = sphereIntersectionTest(geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
+				}else if (geoms[i].type == CUBE){
+					tmpDist = boxIntersectionTest(   geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
+				}//insert triangles here for meshes
+			//TODO: ADD MESH STUFF
+			}
+			if(distToIntersect == FLT_MAX){ //no intersection, we can add color
+				 //change weight calculation when we add other materials
+				float weight = imageWeights[index];
+				float denom  = weight + 1.0f;
+				colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[idx].colorAcc * (1.0f /denom) * lightPaths[0].vert[idx].colorAcc;
+				imageWeights[index] = denom;
           //return;
-        }
-      }
+			}
       
     }
   }
@@ -382,8 +403,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&eyePaths,           (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
 
   // allocate Light paths
-  Path* lightPaths = NULL;
-  cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
+	Path* lightPaths = NULL;
+	cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
   
   // Allocate per-pixel accumulated weight (probabilites of valid light paths)
   float* imageWeights = NULL;
@@ -449,8 +470,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     //do one step
     buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths);
   }
-  
-  //buildLightPath
+
+   //buildLightPath
   for(int i = 0; i < traceDepth; i++){
     //do one step
     buildEyePath<<<1, numLightpaths>>>(glm::vec2(10,1), (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths);
@@ -508,3 +529,4 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   checkCUDAError("Kernel failed!");
 }
+
