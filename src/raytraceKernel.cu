@@ -234,6 +234,12 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       eyePaths[index].vert[currDepth].isValid = 0;
       return;
     }
+    //clear vertices
+    eyePaths[index].vert[currDepth].position = glm::vec3(0,0,0);
+    eyePaths[index].vert[currDepth].colorAcc = glm::vec3(0,0,0);
+    eyePaths[index].vert[currDepth].isValid  = 1;
+    eyePaths[index].vert[currDepth].hitLight = 0;
+    
     
     //get variables
     ray thisRay     = rayList[index].RAY;
@@ -266,12 +272,14 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       eyePaths[index].vert[currDepth].isValid = 0;
       rayList[index].isValid = 0;
       //validRays[index] = 0; //for stream compaction
+      return;
     }else if(mat.emittance > 0.001){  //is this a light source?
       COLOR = COLOR * (mat.color * mat.emittance);
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].hitLight = 1;
       eyePaths[index].vert[currDepth].colorAcc = COLOR;
       rayList[index].isValid = 0;   //STOP BOUNCING WHEN I HIT A LIGHT SOURCE
+      eyePaths[index].vert[currDepth].isValid = 1;
       //validRays[index] = 0; //for stream compaction
       return;
     }
@@ -302,13 +310,13 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-    for (int i = traceDepth; i > 0; i--){
+    for (int i = 0; i < traceDepth; i++){
       if (eyePaths[index].vert[i].isValid != 0){
         if(eyePaths[index].vert[i].hitLight == 1){
           //change weight calculation when we add other materials
           float weight = imageWeights[index];
-          float denom  = weight + float(i);
-          colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[i].colorAcc * (float(i) /denom);
+          float denom  = weight + 1.0f;
+          colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[i].colorAcc * (1.0f /denom);
           imageWeights[index] = denom;
           return;
         }
