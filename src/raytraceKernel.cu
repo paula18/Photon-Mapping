@@ -141,7 +141,25 @@ __global__ void initializeRay(glm::vec2 resolution, float time, cameraData cam, 
   }
 }
 
+__global__ void initializeLightPaths(float time, cameraData cam, rayState* lightrayList, int numLightpaths){
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
+	if((index <= numLightpaths))
+	{
+		ray thisRay;
+		//HARDCODED AS A POINT LIGHT 
+		lightrayList[index].RAY.origin = glm::vec3(0, 9, 0); 
+
+		thrust::default_random_engine rng(hash(index * time));
+		thrust::uniform_real_distribution<float> u01(0,1);
+		float random = (float) u01(rng);
+
+		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random); 
+		lightrayList[index].isValid = true;
+		lightrayList[index].color = glm::vec3(1.0);
+		//lightrayList[index]
+	}
+}
 
 ///////////////////////////////////
 //////////////////////////////////
@@ -175,7 +193,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
     //get variables
     ray thisRay     = rayList[index].RAY;
     glm::vec3 COLOR = rayList[index].color;
-
     //intersection checks:
     float distToIntersect = FLT_MAX;//infinite distance
     float tmpDist;
@@ -213,7 +230,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
     thrust::default_random_engine rng(hash(index * (time + currDepth)));
     thrust::uniform_real_distribution<float> u01(0,1);
     calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng)); 
-
     //update struct
     rayList[index].RAY   = thisRay;
     rayList[index].color = COLOR;
@@ -271,6 +287,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time); //UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].isValid = 0;
       rayList[index].isValid = 0;
+	  return;
       //validRays[index] = 0; //for stream compaction
       return;
     }else if(mat.emittance > 0.001){  //is this a light source?
@@ -278,7 +295,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].hitLight = 1;
       eyePaths[index].vert[currDepth].colorAcc = COLOR;
-      rayList[index].isValid = 0;   //STOP BOUNCING WHEN I HIT A LIGHT SOURCE
+      //rayList[index].isValid = 0;   //STOP BOUNCING WHEN I HIT A LIGHT SOURCE
       eyePaths[index].vert[currDepth].isValid = 1;
       //validRays[index] = 0; //for stream compaction
       return;
@@ -318,7 +335,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
           float denom  = weight + 1.0f;
           colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[i].colorAcc * (1.0f /denom);
           imageWeights[index] = denom;
-          return;
+          //return;
         }
       }
       
@@ -363,6 +380,10 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   // allocate eye path per pixel
   Path* eyePaths = NULL;
   cudaMalloc((void**)&eyePaths,           (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
+
+  // allocate Light paths
+	Path* lightPaths = NULL;
+	cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
   
   // Allocate per-pixel accumulated weight (probabilites of valid light paths)
   float* imageWeights = NULL;
@@ -406,12 +427,21 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   rayState* rayList = NULL;
   cudaMalloc((void**)&rayList, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(rayState));
 
+  //allocate light rays 
+  rayState* lightrayList = NULL;
+  cudaMalloc((void**)&lightrayList, 10 * sizeof(rayState));
+
   
 
 
   // kernel launches
   //Get initial rays
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
+
+  //Initialize light subpaths
+  int numLightpaths = 10;
+
+  initializeLightPaths<<<1, 10>>>((float)iterations, cam, lightrayList, numLightpaths);
   
 
   //build eye path
@@ -462,6 +492,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaFree( cudageoms );
   cudaFree(materialList); //added
   cudaFree(rayList);      //added
+  cudaFree(lightrayList); //VCM added
   cudaFree(eyePaths);     //added
   cudaFree(imageWeights); //added
   delete geomList;
