@@ -319,7 +319,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
   }
 }
 
-__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths){
+__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths, Path* lightPaths){
   // index into array is based off pixel position
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -382,8 +382,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&eyePaths,           (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
 
   // allocate Light paths
-	Path* lightPaths = NULL;
-	cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
+  Path* lightPaths = NULL;
+  cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
   
   // Allocate per-pixel accumulated weight (probabilites of valid light paths)
   float* imageWeights = NULL;
@@ -450,8 +450,14 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths);
   }
   
+  //buildLightPath
+  for(int i = 0; i < traceDepth; i++){
+    //do one step
+    buildEyePath<<<1, numLightpaths>>>(glm::vec2(10,1), (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths);
+  }
+  
   //connect paths and render to screen
-  connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths);
+  connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
 
 
 // original Path Tracing Algorithm
