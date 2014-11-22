@@ -58,6 +58,7 @@ struct camera {
 	glm::vec2 fov;
 	unsigned int iterations;
 	glm::vec3* image;
+	float* imageWeights;
 	ray* rayList;
 	std::string imageName;
 	float* DOF;//new
@@ -83,5 +84,18 @@ struct rayState{
   glm::vec3 color;
   int photoIDX;
 };
+
+//new structs for Bidirectional Path Tracer
+struct vertex {
+  glm::vec3 position;
+  glm::vec3 colorAcc; //accumulated color
+  int isValid;
+  int hitLight;
+};
+
+struct Path {
+  vertex vert[4]; //MUST MATCH TRACE DEPTH
+};
+
 
 #endif //CUDASTRUCTS_H

@@ -220,9 +220,11 @@ int scene::loadCamera(){
 	
 	//set up render camera stuff
 	renderCam.image = new glm::vec3[(int)renderCam.resolution.x*(int)renderCam.resolution.y];
+	renderCam.imageWeights = new float[(int)renderCam.resolution.x*(int)renderCam.resolution.y];
 	renderCam.rayList = new ray[(int)renderCam.resolution.x*(int)renderCam.resolution.y];
 	for(int i=0; i<renderCam.resolution.x*renderCam.resolution.y; i++){
 		renderCam.image[i] = glm::vec3(0,0,0);
+		renderCam.imageWeights[i] = 0.0;
 	}
 	
 	cout << "Loaded " << frameCount << " frames for camera!" << endl;

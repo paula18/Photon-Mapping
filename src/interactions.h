@@ -182,6 +182,9 @@ __host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm:
                                        glm::vec3& color, glm::vec3& unabsorbedColor, material m){ */
 __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2){
+  // Start with only diffuse
+  return calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
+  /*
   if((seed1 + seed2) > 1){
     //check reflectance first
     if(seed2 < mat.hasReflective){ 
@@ -201,6 +204,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
       return calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
     }
   }
+  */
 };
 
 #endif

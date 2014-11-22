@@ -44,13 +44,6 @@ __host__ __device__ glm::vec3 generateRandomNumberFromThread(glm::vec2 resolutio
   return glm::vec3((float) u01(rng), (float) u01(rng), (float) u01(rng));
 }
 
-
-
-///////////////////////////////////
-//////////////////////////////////
-// TODO: IMPLEMENT THIS FUNCTION/
-////////////////////////////////
-///////////////////////////////
 // Function that does the initial raycast from the camera
 __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov, float DOF, float aperature){
   int index = x + (y * resolution.x);
@@ -158,6 +151,7 @@ __global__ void initializeRay(glm::vec2 resolution, float time, cameraData cam, 
 ////////////////////////////////
 ///////////////////////////////
 // Core raytracer kernel
+/*
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
                             staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials, 
                             rayState* rayList, int currDepth, int* validRays, int length){
@@ -207,9 +201,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
       colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time);
       rayList[index].isValid = 0;
       validRays[index] = 0;
-    }
-    //is this a light source?
-    if(mat.emittance > 0.001){
+    }else if(mat.emittance > 0.001){  //is this a light source?
       COLOR = COLOR * (mat.color * mat.emittance);
       colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time);
       rayList[index].isValid = 0;
@@ -221,9 +213,108 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
     thrust::default_random_engine rng(hash(index * (time + currDepth)));
     thrust::uniform_real_distribution<float> u01(0,1);
     calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng)); 
+
     //update struct
     rayList[index].RAY   = thisRay;
     rayList[index].color = COLOR;
+  }
+}
+*/
+
+//Build Eye Path
+__global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
+                            staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials, 
+                            rayState* rayList, int currDepth, Path* eyePaths){
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  if((x<=resolution.x && y<=resolution.y)){
+    if(rayList[index].isValid == 0){
+      eyePaths[index].vert[currDepth].isValid = 0;
+      return;
+    }
+    
+    //get variables
+    ray thisRay     = rayList[index].RAY;
+    glm::vec3 COLOR = rayList[index].color;
+
+    //intersection checks:
+    float distToIntersect = FLT_MAX;//infinite distance
+    float tmpDist;
+    glm::vec3 tmpIntersectPoint, tmpIntersectNormal, intersectPoint, intersectNormal;
+    material mat;
+    
+    for(int i = 0; i < numberOfGeoms; i++){
+      if (geoms[i].type == SPHERE){
+        tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
+      }else if (geoms[i].type == CUBE){
+        tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
+      }//insert triangles here for meshes
+      if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
+        distToIntersect = tmpDist;
+        intersectNormal = tmpIntersectNormal;
+        intersectPoint  = tmpIntersectPoint;
+        mat = materials[geoms[i].materialid];
+      }
+    }
+    
+    //Did I intersect anything?
+    if(distToIntersect == FLT_MAX){//miss
+      //this contribution is black
+      //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time); //UPDATE PIXEL COLOR
+      eyePaths[index].vert[currDepth].isValid = 0;
+      rayList[index].isValid = 0;
+      //validRays[index] = 0; //for stream compaction
+    }else if(mat.emittance > 0.001){  //is this a light source?
+      COLOR = COLOR * (mat.color * mat.emittance);
+      //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
+      eyePaths[index].vert[currDepth].hitLight = 1;
+      eyePaths[index].vert[currDepth].colorAcc = COLOR;
+      rayList[index].isValid = 0;   //STOP BOUNCING WHEN I HIT A LIGHT SOURCE
+      //validRays[index] = 0; //for stream compaction
+      return;
+    }
+    
+    //save intersection point to eyePath
+    eyePaths[index].vert[currDepth].position = intersectPoint;
+    
+    //update variables
+    thrust::default_random_engine rng(hash(index * (time + currDepth)));
+    thrust::uniform_real_distribution<float> u01(0,1);
+    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng)); 
+
+    //update struct
+    rayList[index].RAY   = thisRay;
+    rayList[index].color = COLOR;
+    
+    //save color to eyePath
+    eyePaths[index].vert[currDepth].colorAcc = COLOR;
+    eyePaths[index].vert[currDepth].isValid = 1;
+  }
+}
+
+__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths){
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  if((x<=resolution.x && y<=resolution.y)){
+    
+    //updates all eye paths that hit a light source
+    for (int i = traceDepth; i > 0; i--){
+      if (eyePaths[index].vert[i].isValid != 0){
+        if(eyePaths[index].vert[i].hitLight == 1){
+          //change weight calculation when we add other materials
+          float weight = imageWeights[index];
+          float denom  = weight + float(i);
+          colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[i].colorAcc * (float(i) /denom);
+          imageWeights[index] = denom;
+          return;
+        }
+      }
+      
+    }
   }
 }
 
@@ -246,15 +337,10 @@ __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, in
 }
 
 
-///////////////////////////////////
-//////////////////////////////////
-// TODO: Finish THIS FUNCTION /// You will have to complete this function to support passing materials and lights to CUDA
-////////////////////////////////
-///////////////////////////////
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
-  int traceDepth = 10; //determines how many bounces the raytracer traces
+  int traceDepth = 4; //determines how many bounces the raytracer traces
 
   // set up crucial magic
   int tileSize = 8;
@@ -265,6 +351,15 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   glm::vec3* cudaimage = NULL;
   cudaMalloc((void**)&cudaimage,           (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(glm::vec3));
   cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+  
+  // allocate eye path per pixel
+  Path* eyePaths = NULL;
+  cudaMalloc((void**)&eyePaths,           (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
+  
+  // Allocate per-pixel accumulated weight (probabilites of valid light paths)
+  float* imageWeights = NULL;
+  cudaMalloc((void**)&imageWeights,                  (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(float));
+  cudaMemcpy( imageWeights, renderCam->imageWeights, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(float), cudaMemcpyHostToDevice);
   
   // package geometry and materials and sent to GPU
   staticGeom* geomList = new staticGeom[numberOfGeoms];
@@ -309,12 +404,28 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   // kernel launches
   //Get initial rays
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
+  
+
+  //build eye path
+  for(int i = 0; i < traceDepth; i++){
+    //do one step
+    buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths);
+  }
+  
+  //connect paths and render to screen
+  connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths);
+
+
+// original Path Tracing Algorithm
+  /*
+   // kernel launches
+  //Get initial rays
+  initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
   thrust::device_vector<int> validRays((int)renderCam->resolution.x * (int)renderCam->resolution.y, 1);
   int* thrustArray = thrust::raw_pointer_cast( &validRays[0] );
   int length = thrust::count(validRays.begin(), validRays.end(), 1);//count valid rays
   thrust::device_vector<int> scanRay((int)renderCam->resolution.x * (int)renderCam->resolution.y, 0);
   int* scanPointer = thrust::raw_pointer_cast( &scanRay[0] );
-  
   
   //depth trace with compaction
   for(int i = 0; i <= traceDepth; i++){
@@ -328,18 +439,23 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     //update length
     length = thrust::count(validRays.begin(), validRays.end(), 1);//count valid rays
   }
+  */
 
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
   // retrieve image from GPU
-  cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+  cudaMemcpy( renderCam->image,        cudaimage,    (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+  //retrieve weights from GPU
+  cudaMemcpy( renderCam->imageWeights, imageWeights, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(float), cudaMemcpyDeviceToHost);
 
   // free up stuff, or else we'll leak memory like a madman
   cudaFree( cudaimage );
   cudaFree( cudageoms );
   cudaFree(materialList); //added
-  cudaFree(rayList); //added
+  cudaFree(rayList);      //added
+  cudaFree(eyePaths);     //added
+  cudaFree(imageWeights); //added
   delete geomList;
 
   // make certain the kernel has completed
