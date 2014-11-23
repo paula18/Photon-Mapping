@@ -329,7 +329,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-    for (int lightIDX = 0; lightIDX < 4; lightIDX++){
+    for (int lightIDX = 0; lightIDX < 10; lightIDX++){
       for (int idx = 0; idx < traceDepth; idx++){//traceDepth - 4; // First bounce of light
         for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
           if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
@@ -337,8 +337,8 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
             r.origin = eyePaths[index].vert[eyeVert].position; 
             r.direction = lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position;
             //check intersection of this ray with scene
-
-            float distToIntersect = FLT_MAX;//infinite distance
+            float dist = glm::distance(lightPaths[lightIDX].vert[idx].position, r.origin);
+            float distToIntersect = dist; //FLT_MAX;//infinite distance
             float tmpDist;
             glm::vec3 tmpIntersectPoint, tmpIntersectNormal;
     
@@ -354,7 +354,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
               }
             }
             
-            if(distToIntersect == FLT_MAX){ //no intersection, we can add color
+            if(distToIntersect == dist){ //no intersection, we can add color
             	 //change weight calculation when we add other materials
             	float weight = imageWeights[index];
             	float denom  = weight + 1.0f;
