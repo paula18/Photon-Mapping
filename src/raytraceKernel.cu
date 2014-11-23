@@ -328,7 +328,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-    for (int lightIDX = 0; lightIDX < 1; lightIDX++){
+    for (int lightIDX = 0; lightIDX < 10; lightIDX++){
       int idx = 0;//traceDepth - 4; // First bounce of light
       for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
         if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
