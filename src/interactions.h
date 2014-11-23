@@ -90,28 +90,14 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 nor
 // Now that you know how cosine weighted direction generation works, try implementing 
 // non-cosine (uniform) weighted random direction generation.
 // This should be much easier than if you had to implement calculateRandomDirectionInHemisphere.
-__host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2) {
-  float randomSeed = xi1 * xi2;
-  //from method found at http://mathworld.wolfram.com/SpherePointPicking.html
-  thrust::default_random_engine rng(hash(randomSeed));
-  thrust::uniform_real_distribution<float> u01(-1,1);
-  //thrust::uniform_real_distribution<float> u02(-1,1);
-  float x_1 = 2;
-  float x_2 = 2;
-  float x_1_squared = 4;
-  float x_2_squared = 4;
-  while((x_1_squared + x_2_squared) >= 1){ //reject where sum of squares >= 1
-    x_1 = (float)u01(rng);
-    x_2 = (float)u01(rng);
-    x_1_squared = x_1 * x_1;
-    x_2_squared = x_2 * x_2;
-  }
-  float x, y, z;
-  x = 2 * x_1 + sqrt(1 - x_1_squared - x_2_squared);
-  y = 2 * x_2 + sqrt(1 - x_1_squared - x_2_squared);
-  z = 1 - 2 * (x_1_squared + x_2_squared);
-  
-  return glm::vec3(x,y,z);
+__host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, glm::vec3 center) {
+	float alpha = xi2 * TWO_PI; 
+	float phi = glm::acos(2 * xi1 - 1);
+	float x = center.x + (sin(phi) * cos(alpha));
+	float y = center.y + (sin(phi) * sin(alpha));
+	float z = center.z + (cos(phi));
+
+	return glm::normalize(glm::vec3(x, y, z));
 }
 
 __host__ __device__ int calculateReflective(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,

@@ -148,17 +148,17 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	{
 		ray thisRay;
 		//HARDCODED AS A POINT LIGHT 
-		lightrayList[index].RAY.origin = glm::vec3(-1, 9, 0); 
+		lightrayList[index].RAY.origin = glm::vec3(0, 9, 0); 
 
 		thrust::default_random_engine rng(hash(index * time));
-		thrust::uniform_real_distribution<float> u01(0,1);
+		thrust::uniform_real_distribution<float> u01(-1,1);
+		thrust::uniform_real_distribution<float> u02(-1,1);
 		float random  = (float) u01(rng);
-		float random2 = (float) u01(rng);
+		float random2 = (float) u02(rng);
 
-		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random2); 
+		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random2, lightrayList[index].RAY.origin); 
 		lightrayList[index].isValid = true;
 		lightrayList[index].color = glm::vec3(3.0);
-		//lightrayList[index]
 	}
 }
 
