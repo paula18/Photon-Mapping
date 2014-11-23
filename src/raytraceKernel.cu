@@ -152,9 +152,10 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 
 		thrust::default_random_engine rng(hash(index * time));
 		thrust::uniform_real_distribution<float> u01(0,1);
-		float random = (float) u01(rng);
+		float random  = (float) u01(rng);
+		float random2 = (float) u01(rng);
 
-		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random); 
+		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random2); 
 		lightrayList[index].isValid = true;
 		lightrayList[index].color = glm::vec3(3.0);
 		//lightrayList[index]
@@ -290,7 +291,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
 	  return;
       //validRays[index] = 0; //for stream compaction
       return;
-    }else if(mat.emittance > 0.001){  //is this a light source?
+    }/*else if(mat.emittance > 0.001){  //is this a light source?
       COLOR = COLOR * (mat.color * mat.emittance);
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].hitLight = 1;
@@ -299,7 +300,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       eyePaths[index].vert[currDepth].isValid = 1;
       //validRays[index] = 0; //for stream compaction
       return;
-    }
+    }*/
     
     //save intersection point to eyePath
     eyePaths[index].vert[currDepth].position = intersectPoint;
@@ -328,14 +329,14 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-    for (int lightIDX = 0; lightIDX < 10; lightIDX++){
-      int idx = 0;//traceDepth - 4; // First bounce of light
-      for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
-        if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
-          ray r; 
-          r.origin = eyePaths[index].vert[eyeVert].position; 
-          r.direction = lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position;
-          //check intersection of this ray with scene
+    for (int lightIDX = 0; lightIDX < 4; lightIDX++){
+      for (int idx = 0; idx < traceDepth; idx++){//traceDepth - 4; // First bounce of light
+        for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
+          if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
+            ray r; 
+            r.origin = eyePaths[index].vert[eyeVert].position; 
+            r.direction = lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position;
+            //check intersection of this ray with scene
 
             float distToIntersect = FLT_MAX;//infinite distance
             float tmpDist;
@@ -362,6 +363,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
             	imageWeights[index] = denom;
           //return;
             }
+          }
         }
       }
     }
@@ -525,6 +527,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaFree(rayList);      //added
   cudaFree(lightrayList); //VCM added
   cudaFree(eyePaths);     //added
+  cudaFree(lightPaths);     //added
   cudaFree(imageWeights); //added
   delete geomList;
 

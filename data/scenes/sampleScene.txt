@@ -181,7 +181,7 @@ SCALE       4 4 4
 
 OBJECT 6
 cube
-material 8 
+material 0 
 frame 0
 TRANS       0 10 0
 ROTAT       0 0 90
