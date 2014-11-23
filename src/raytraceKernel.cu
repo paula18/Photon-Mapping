@@ -156,7 +156,7 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 
 		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random); 
 		lightrayList[index].isValid = true;
-		lightrayList[index].color = glm::vec3(1.0);
+		lightrayList[index].color = glm::vec3(3.0);
 		//lightrayList[index]
 	}
 }
@@ -328,38 +328,42 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   if((x<=resolution.x && y<=resolution.y)){
     
     //updates all eye paths that hit a light source
-   // for (int i = 0; i < traceDepth; i++){
-      int idx = traceDepth - 1; // off by one 
-      if (eyePaths[index].vert[idx].isValid != 0 && lightPaths[0].vert[idx].isValid != 0){
-      	//Start by connecting first lightpath to last vertex of eye path 
-		  ray r; 
-		  r.origin = eyePaths[index].vert[idx].position; 
-		  r.direction = lightPaths[0].vert[idx].position - eyePaths[index].vert[idx].position;
+    for (int lightIDX = 0; lightIDX < 1; lightIDX++){
+      int idx = 0;//traceDepth - 4; // First bounce of light
+      for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
+        if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
+          ray r; 
+          r.origin = eyePaths[index].vert[eyeVert].position; 
+          r.direction = lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position;
+          //check intersection of this ray with scene
 
-		  //check intersection of this ray with scene
-
-			float distToIntersect = FLT_MAX;//infinite distance
-			float tmpDist;
-			glm::vec3 tmpIntersectPoint, tmpIntersectNormal, intersectPoint, intersectNormal;
-			material mat;
+            float distToIntersect = FLT_MAX;//infinite distance
+            float tmpDist;
+            glm::vec3 tmpIntersectPoint, tmpIntersectNormal;
     
-			for(int i = 0; i < numberOfGeoms; i++){
-				if (geoms[i].type == SPHERE){
-					tmpDist = sphereIntersectionTest(geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
-				}else if (geoms[i].type == CUBE){
-					tmpDist = boxIntersectionTest(   geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
-				}//insert triangles here for meshes
-			//TODO: ADD MESH STUFF
-			}
-			if(distToIntersect == FLT_MAX){ //no intersection, we can add color
-				 //change weight calculation when we add other materials
-				float weight = imageWeights[index];
-				float denom  = weight + 1.0f;
-				colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[idx].colorAcc * (1.0f /denom) * lightPaths[0].vert[idx].colorAcc;
-				imageWeights[index] = denom;
+            for(int i = 0; i < numberOfGeoms; i++){
+            	if (geoms[i].type == SPHERE){
+            		tmpDist = sphereIntersectionTest(geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
+            	}else if (geoms[i].type == CUBE){
+            		tmpDist = boxIntersectionTest(   geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
+            	}//insert triangles here for meshes  //TODO: ADD MESH STUFF
+            //update distance
+              if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
+                distToIntersect = tmpDist;
+              }
+            }
+            
+            if(distToIntersect == FLT_MAX){ //no intersection, we can add color
+            	 //change weight calculation when we add other materials
+            	float weight = imageWeights[index];
+            	float denom  = weight + 1.0f;
+            	glm::vec3 pathColor = eyePaths[index].vert[eyeVert].colorAcc  * lightPaths[lightIDX].vert[idx].colorAcc;
+            	colors[index] = colors[index] * (weight/denom) + pathColor * (1.0f /denom);
+            	imageWeights[index] = denom;
           //return;
-			}
-      
+            }
+        }
+      }
     }
   }
 }
