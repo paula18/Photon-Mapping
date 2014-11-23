@@ -148,7 +148,7 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	{
 		ray thisRay;
 		//HARDCODED AS A POINT LIGHT 
-		lightrayList[index].RAY.origin = glm::vec3(0, 9, 0); 
+		lightrayList[index].RAY.origin = glm::vec3(-1, 9, 0); 
 
 		thrust::default_random_engine rng(hash(index * time));
 		thrust::uniform_real_distribution<float> u01(0,1);
@@ -335,7 +335,7 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
           if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
             ray r; 
             r.origin = eyePaths[index].vert[eyeVert].position; 
-            r.direction = lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position;
+            r.direction = glm::normalize(lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position);
             //check intersection of this ray with scene
             float dist = glm::distance(lightPaths[lightIDX].vert[idx].position, r.origin);
             float distToIntersect = dist; //FLT_MAX;//infinite distance
