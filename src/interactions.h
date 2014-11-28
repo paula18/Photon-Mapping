@@ -146,7 +146,7 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
   //First randomly decide material type from material
   int materialType = 0;//ALL DIFFUSE
   if(materialType == 0){
-    float cos = glm::dot(toLight, normal);
+    float cos = max(glm::dot(toLight, normal),0.0);
     glm::vec3 color = lightColor * cos * mat.color;
     return color;
   }else if(materialType == 1){

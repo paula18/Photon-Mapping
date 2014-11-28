@@ -367,12 +367,33 @@ __global__ void RenderColor(glm::vec2 resolution, glm::vec3* colors, float* imag
     for(int vert = traceDepth - 1; vert >= 0; vert--){
       if(eyePaths[index].vert[vert].isValid){
         float weight = imageWeights[index];
-        float denom  = weight + (float)(vert + 1.0f);
-        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (1.0f /denom);
+        float pdfWeight = 1.0 /(float)(vert + 1.0f);
+        float denom  = weight + pdfWeight;
+        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (pdfWeight /denom);
         imageWeights[index] = denom;
         return;
       }
     }
+  }
+}
+
+//Only render direct lighting on first bounce
+__global__ void RenderDirectLight(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths) {
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  //integrate light contribution Back to Front.
+  if(x<=resolution.x && y<=resolution.y){
+    int vert = 0;
+    if(eyePaths[index].vert[vert].isValid){
+        float weight = imageWeights[index];
+        float solidAngle = eyePaths[index].vert[vert].solidAngle;
+        float denom  = weight + solidAngle;
+        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].directLight * (solidAngle /denom);
+        imageWeights[index] = denom;
+        return;
+      }
   }
 }
 
@@ -396,8 +417,9 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     int vert = 0;
     if(eyePaths[index].vert[vert].isValid){
         float weight = imageWeights[index];
-        float denom  = weight + eyePaths[index].vert[vert].solidAngle;
-        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].directLight * (1.0f /denom);
+        float solidAngle = eyePaths[index].vert[vert].solidAngle;
+        float denom  = weight + solidAngle;
+        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].directLight * (solidAngle /denom);
         imageWeights[index] = denom;
         return;
       }
@@ -547,7 +569,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 */
 
 //RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
-MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+//MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
