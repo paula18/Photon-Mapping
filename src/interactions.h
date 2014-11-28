@@ -142,7 +142,9 @@ __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, g
 }
 
 //materialType  0 = diffuse
-__host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat, int materialType){
+__host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
+  //First randomly decide material type from material
+  int materialType = 0;//ALL DIFFUSE
   if(materialType == 0){
     float cos = glm::dot(toLight, normal);
     glm::vec3 color = lightColor * cos * mat.color;
