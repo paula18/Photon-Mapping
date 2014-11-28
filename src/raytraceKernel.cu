@@ -162,86 +162,60 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	}
 }
 
-///////////////////////////////////
-//////////////////////////////////
-// TODO: IMPLEMENT THIS FUNCTION/ 
-//   raytraceRay() should take in a camera, image buffer, geometry, materials, and lights, 
-//   and should trace a ray through the scene and write the resultant color to a pixel in the image buffer.
-////////////////////////////////
-///////////////////////////////
-// Core raytracer kernel
-/*
-__global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials, 
-                            rayState* rayList, int currDepth, int* validRays, int length){
-  //need to update for string compaction
-  //int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-  //int y = (blockIdx.y * blockDim.y) + threadIdx.y;
-  //int index = x + (y * resolution.x);
-  int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-  if(index < length){
-  //if((x<=resolution.x && y<=resolution.y)){
-    if(rayList[index].isValid == 0){
-      return;
-    }
-    if(currDepth >= maxDepth){//exceeded max depth
-       //this contribution is black
-      colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time);
-      rayList[index].isValid = 0;
-      validRays[index] = 0;
-      return;
-    }
-    //get variables
-    ray thisRay     = rayList[index].RAY;
-    glm::vec3 COLOR = rayList[index].color;
-    //intersection checks:
-    float distToIntersect = FLT_MAX;//infinite distance
-    float tmpDist;
-    glm::vec3 tmpIntersectPoint, tmpIntersectNormal, intersectPoint, intersectNormal;
-    material mat;
-    
-    for(int i = 0; i < numberOfGeoms; i++){
-      if (geoms[i].type == SPHERE){
-        tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-      }else if (geoms[i].type == CUBE){
-        tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-      }//insert triangles here for meshes
-      if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
+
+__host__ __device__ void directLightContribution(material m, staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int numberOfLights, material* materials, glm::vec3 normal, glm::vec3 inDirection, glm::vec3 intersectionPoint, int materialType, float rnd1, float rnd2){
+  /////////////////////////////////////////////////
+  //TODO: Update to support multiple light sources
+  //  - Currently assumes all lights are spheres
+  ////////////////////////////////////////////////
+  
+  //Get random point on light
+  glm::vec3 lightPOS = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
+  lightPOS = multiplyMV(lights[0].transform, glm::vec4(lightPOS,1.0f));         // translate to point on light
+  float dist = glm::distance(lightPOS, intersectionPoint);
+  
+  //make ray
+  ray thisRay;
+  thisRay.origin = intersectionPoint;
+  thisRay.direction = (lightPOS - thisRay.origin);
+  //intersection checks
+  float distToIntersect = dist; //distance to light intersection
+  float tmpDist;
+  glm::vec3 tmpIntersectPoint, intersectPoint, tmpIntersectNormal, intersectNormal;
+  material mat;
+  
+  for(int i = 0; i < numberOfGeoms; i++){
+    if (geoms[i].type == SPHERE){
+      tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
+    }else if (geoms[i].type == CUBE){
+      tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
+    }//insert triangles here for meshes
+    if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
+      mat = materials[geoms[i].materialid];
+      if(mat.emittance < .001){ // don't count intersections with lights (AVOID SELF INTERSECTION)
         distToIntersect = tmpDist;
         intersectNormal = tmpIntersectNormal;
         intersectPoint  = tmpIntersectPoint;
-        mat = materials[geoms[i].materialid];
       }
     }
-    //Did I intersect anything?
-    if(distToIntersect == FLT_MAX){//miss
-      //this contribution is black
-      colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time);
-      rayList[index].isValid = 0;
-      validRays[index] = 0;
-    }else if(mat.emittance > 0.001){  //is this a light source?
-      COLOR = COLOR * (mat.color * mat.emittance);
-      colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time);
-      rayList[index].isValid = 0;
-      validRays[index] = 0;
-      return;
-    }
-    
-    //update variables
-    thrust::default_random_engine rng(hash(index * (time + currDepth)));
-    thrust::uniform_real_distribution<float> u01(0,1);
-    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng)); 
-    //update struct
-    rayList[index].RAY   = thisRay;
-    rayList[index].color = COLOR;
   }
+  glm::vec3 dirColor;
+  if(distToIntersect < dist){//in shadow
+    dirColor = glm::vec3(0,0,0);
+  }else{
+  ///////////////////////////////
+  //MODIFY THIS FOR OTHER BSDFS
+  //////////////////////////////
+    //dirColor = 
+  }
+  //calculate solid angle
+  
 }
-*/
 
 //Build Eye Path
 __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
                             staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials, 
-                            rayState* rayList, int currDepth, Path* eyePaths){
+                            rayState* rayList, int currDepth, Path* eyePaths, staticGeom* lights, int numberOfLights){
   // index into array is based off pixel position
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -297,13 +271,17 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       return;
     }
     
+    //random number generator
+    thrust::default_random_engine rng(hash(index * (time + currDepth)));
+    thrust::uniform_real_distribution<float> u01(0,1);
+    
+    
     //save intersection point to eyePath
     eyePaths[index].vert[currDepth].position = intersectPoint;
     
     //update variables
-    thrust::default_random_engine rng(hash(index * (time + currDepth)));
-    thrust::uniform_real_distribution<float> u01(0,1);
-    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng)); 
+    float pdfWeight = 0;
+    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight); 
 
     //update struct
     rayList[index].RAY   = thisRay;
@@ -312,8 +290,11 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     //save color to eyePath
     eyePaths[index].vert[currDepth].colorAcc = COLOR;
     eyePaths[index].vert[currDepth].isValid = 1;
+    eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth].pathProbability * pdfWeight; //Update Path Weight
   }
 }
+
+
 
 __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths, Path* lightPaths){
   // index into array is based off pixel position
@@ -363,7 +344,25 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
     }
   }
 }
-
+//NO DIRECT LIGHTING CONTRIBUTION
+__global__ void RenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths) {
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  //integrate light contribution Back to Front.
+  if(x<=resolution.x && y<=resolution.y){
+    for(int vert = traceDepth - 1; vert >= 0; vert--){
+      if(eyePaths[index].vert[vert].isValid){
+        float weight = imageWeights[index];
+        float denom  = weight + (float)(vert + 1.0f);
+        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (1.0f /denom);
+        imageWeights[index] = denom;
+        return;
+      }
+    }
+  }
+}
 
 __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths) {
   // index into array is based off pixel position
@@ -501,15 +500,15 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
 
   //Initialize light subpaths
-  int numLightpaths = 10;
+//  int numLightpaths = 10;
 
-  initializeLightPaths<<<1, 10>>>((float)iterations, cam, lightrayList, numLightpaths);
+//  initializeLightPaths<<<1, 10>>>((float)iterations, cam, lightrayList, numLightpaths);
   
 
   //build eye path
   for(int i = 0; i < traceDepth; i++){
     //do one step
-    buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths);
+    buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths, cudalights, numberOfLights);
   }
 
 /*
@@ -526,35 +525,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
 */
 
-MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 
-
-
-
-// original Path Tracing Algorithm
-  /*
-   // kernel launches
-  //Get initial rays
-  initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
-  thrust::device_vector<int> validRays((int)renderCam->resolution.x * (int)renderCam->resolution.y, 1);
-  int* thrustArray = thrust::raw_pointer_cast( &validRays[0] );
-  int length = thrust::count(validRays.begin(), validRays.end(), 1);//count valid rays
-  thrust::device_vector<int> scanRay((int)renderCam->resolution.x * (int)renderCam->resolution.y, 0);
-  int* scanPointer = thrust::raw_pointer_cast( &scanRay[0] );
-  
-  //depth trace with compaction
-  for(int i = 0; i <= traceDepth; i++){
-    //do one step
-    raytraceRay<<<(int)ceil((float)length/64.0f), 64>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, thrustArray, length);
-    //build scan
-    thrust::exclusive_scan(validRays.begin(), validRays.end(), &scanRay[0]);
-    scanPointer = thrust::raw_pointer_cast( &scanRay[0] );
-    //compact rays
-    compactRays<<<(int)ceil((float)length/64.0f), 64 >>>(scanPointer, rayList, thrustArray, length);
-    //update length
-    length = thrust::count(validRays.begin(), validRays.end(), 1);//count valid rays
-  }
-  */
 
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
