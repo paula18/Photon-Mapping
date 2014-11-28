@@ -300,7 +300,12 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     //save color to eyePath
     eyePaths[index].vert[currDepth].colorAcc = COLOR;
     eyePaths[index].vert[currDepth].isValid = 1;
-    eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth].pathProbability * pdfWeight; //Update Path Weight
+    if(currDepth == 0){
+      eyePaths[index].vert[currDepth].pathProbability = pdfWeight;
+    }else{
+      eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
+    }
+    
     eyePaths[index].vert[currDepth].directLight = directLight;
     eyePaths[index].vert[currDepth].solidAngle = solidAngle;
   }
@@ -367,7 +372,7 @@ __global__ void RenderColor(glm::vec2 resolution, glm::vec3* colors, float* imag
     for(int vert = traceDepth - 1; vert >= 0; vert--){
       if(eyePaths[index].vert[vert].isValid){
         float weight = imageWeights[index];
-        float pdfWeight = 1.0 /(float)(vert + 1.0f);
+        float pdfWeight = eyePaths[index].vert[vert].pathProbability;
         float denom  = weight + pdfWeight;
         colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (pdfWeight /denom);
         imageWeights[index] = denom;
@@ -568,8 +573,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
 */
 
-//RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
-RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+//RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 //MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 
   //update visual
