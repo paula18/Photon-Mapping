@@ -315,8 +315,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
   }
 }
 
-__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths,
-	Path* lightPaths){
+__global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths, Path* lightPaths){
   // index into array is based off pixel position
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -371,14 +370,15 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
+  //integrate light contribution Back to Front.
   if(x<=resolution.x && y<=resolution.y){
     for(int vert = traceDepth - 1; vert >= 0; vert--){
       if(eyePaths[index].vert[vert].isValid){
-        //integrate light contribution Back to Front.
         float weight = imageWeights[index];
         float denom  = weight + (float)(vert + 1.0f);
         colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (1.0f /denom);
         imageWeights[index] = denom;
+        return;
       }
     }
   }
