@@ -27,6 +27,7 @@ public:
     ~scene();
 
     vector<geom> objects;
+    vector<geom> lights; //ADDED FOR MIS
     vector<material> materials;
     camera renderCam;
 };

@@ -32,6 +32,13 @@ scene::scene(string filename){
 			}
 		}
 	}
+	//Copy light objects into lights.
+	for(int i = 0; i < objects.size(); i ++){
+		material m = materials[objects[i].materialid]; //check material of each object
+		if(m.emittance > .001){
+			lights.push_back(objects[i]);
+		}
+	}
 }
 
 int scene::loadObject(string objectid){

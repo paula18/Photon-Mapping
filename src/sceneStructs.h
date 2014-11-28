@@ -92,6 +92,7 @@ struct vertex {
   glm::vec3 directLight; //MIS
   float pathProbability; //MIS
   float solidAngle;      //MIS
+  material mat;          //MIS
   int isValid;
   int hitLight;
 };

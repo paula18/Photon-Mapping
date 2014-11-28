@@ -405,7 +405,7 @@ __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, in
 
 
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
-void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
+void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms, geom* lights, int numberOfLights){
   
   int traceDepth = 4; //determines how many bounces the raytracer traces
 
@@ -450,6 +450,26 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms,   numberOfGeoms * sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms * sizeof(staticGeom), cudaMemcpyHostToDevice);
   
+  
+  // package Lights and sent to GPU
+  staticGeom* lightList = new staticGeom[numberOfLights];
+  for(int i=0; i<numberOfLights; i++){
+    staticGeom newStaticGeom;
+    newStaticGeom.type = lights[i].type;
+    newStaticGeom.materialid = lights[i].materialid;
+    newStaticGeom.translation = lights[i].translations[frame];
+    newStaticGeom.rotation = lights[i].rotations[frame];
+    newStaticGeom.scale = lights[i].scales[frame];
+    newStaticGeom.transform = lights[i].transforms[frame];
+    newStaticGeom.inverseTransform = lights[i].inverseTransforms[frame];
+    lightList[i] = newStaticGeom;
+  }
+  
+  staticGeom* cudalights = NULL;
+  cudaMalloc((void**)&cudalights,    numberOfLights * sizeof(staticGeom));
+  cudaMemcpy( cudalights, lightList, numberOfLights * sizeof(staticGeom), cudaMemcpyHostToDevice);
+  
+  
   // package camera
   cameraData cam;
   cam.resolution = renderCam->resolution;
@@ -492,11 +512,14 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths);
   }
 
+/*
    //buildLightPath
   for(int i = 0; i < traceDepth; i++){
     //do one step
     buildEyePath<<<1, numLightpaths>>>(glm::vec2(10,1), (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths);
   }
+*/
+
 
 /*  
   //connect paths and render to screen
@@ -544,6 +567,7 @@ MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cu
   // free up stuff, or else we'll leak memory like a madman
   cudaFree( cudaimage );
   cudaFree( cudageoms );
+  cudaFree( cudalights ); //added
   cudaFree(materialList); //added
   cudaFree(rayList);      //added
   cudaFree(lightrayList); //VCM added
@@ -551,6 +575,7 @@ MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cu
   cudaFree(lightPaths);     //added
   cudaFree(imageWeights); //added
   delete geomList;
+  delete lightList;//ADDED
 
   // make certain the kernel has completed
   cudaThreadSynchronize();
