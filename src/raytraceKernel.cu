@@ -370,6 +370,16 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   }
 }
 
+__global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights int traceDepth, Path* eyePaths){
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  if((x<=resolution.x && y<=resolution.y)){
+    //integrate light contribution Back to Front.
+  }
+}
+
 __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, int length){
   int index = (blockIdx.x * blockDim.x) + threadIdx.x;
   if(index >= length){
@@ -482,9 +492,14 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     //do one step
     buildEyePath<<<1, numLightpaths>>>(glm::vec2(10,1), (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths);
   }
-  
+
+/*  
   //connect paths and render to screen
   connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
+*/
+MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+
+
 
 
 // original Path Tracing Algorithm
