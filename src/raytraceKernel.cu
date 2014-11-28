@@ -284,23 +284,18 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     
     //Did I intersect anything?
     if(distToIntersect == FLT_MAX){//miss
-      //this contribution is black
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time); //UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].isValid = 0;
       rayList[index].isValid = 0;
-	  return;
-      //validRays[index] = 0; //for stream compaction
       return;
-    }/*else if(mat.emittance > 0.001){  //is this a light source?
+    }else if(mat.emittance > 0.001){  //is this a light source?
       COLOR = COLOR * (mat.color * mat.emittance);
       //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
       eyePaths[index].vert[currDepth].hitLight = 1;
       eyePaths[index].vert[currDepth].colorAcc = COLOR;
-      //rayList[index].isValid = 0;   //STOP BOUNCING WHEN I HIT A LIGHT SOURCE
       eyePaths[index].vert[currDepth].isValid = 1;
-      //validRays[index] = 0; //for stream compaction
       return;
-    }*/
+    }
     
     //save intersection point to eyePath
     eyePaths[index].vert[currDepth].position = intersectPoint;
@@ -370,15 +365,25 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
   }
 }
 
-__global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights int traceDepth, Path* eyePaths){
+
+__global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths) {
   // index into array is based off pixel position
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
-  if((x<=resolution.x && y<=resolution.y)){
-    //integrate light contribution Back to Front.
+  if(x<=resolution.x && y<=resolution.y){
+    for(int vert = traceDepth - 1; vert >= 0; vert--){
+      if(eyePaths[index].vert[vert].isValid){
+        //integrate light contribution Back to Front.
+        float weight = imageWeights[index];
+        float denom  = weight + (float)(vert + 1.0f);
+        colors[index] = colors[index] * (weight/denom) + eyePaths[index].vert[vert].colorAcc * (1.0f /denom);
+        imageWeights[index] = denom;
+      }
+    }
   }
 }
+
 
 __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, int length){
   int index = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -497,6 +502,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //connect paths and render to screen
   connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
 */
+
 MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 
 

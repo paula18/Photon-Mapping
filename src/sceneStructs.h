@@ -88,7 +88,10 @@ struct rayState{
 //new structs for Bidirectional Path Tracer
 struct vertex {
   glm::vec3 position;
-  glm::vec3 colorAcc; //accumulated color
+  glm::vec3 colorAcc; //accumulated color  (OLD TAKE OUT?)
+  glm::vec3 directLight; //MIS
+  float pathProbability; //MIS
+  float solidAngle;      //MIS
   int isValid;
   int hitLight;
 };
