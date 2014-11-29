@@ -162,9 +162,19 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	}
 }
 
-__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, glm::vec3 normal){
+__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
+	
 	glm::vec3 direction = light.translation - position; 
-	return (glm::dot(glm::normalize(direction), normal)/glm::length(direction)); 
+
+	glm::vec3 p1 = glm::normalize(glm::vec3(1,1,1)); //point on a unit sphere
+	glm::vec3 pOnSphere = multiplyMV(light.transform, glm::vec4(p1,1.0f));//point on our sphere
+	glm::vec3 centerOfSphere = multiplyMV(light.transform, glm::vec4(0,0,0,1.0f));// center of sphere
+	
+	float radius = glm::distance(pOnSphere, centerOfSphere);
+	float angle = glm::atan(radius/glm::length(direction));
+	float x = TWO_PI *(1 - glm::cos(angle));
+	return x;
+	//return (glm::dot(glm::normalize(direction), normal)/glm::length(direction)); 
 }
 
 __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int numberOfLights, material* materials, glm::vec3 normal, glm::vec3 inDirection, glm::vec3 intersectionPoint, float rnd1, float rnd2, float& solidAngle){
@@ -215,7 +225,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
     dirColor = getColorFromBSDF(inDirection, thisRay.direction, normal, lightColor, m);
   }
   //calculate solid angle
-  solidAngle = getSolidAngle(lights[0], intersectionPoint, normal);
+  solidAngle = getSolidAngle(lights[0], intersectionPoint);
   return dirColor;
 }
 
@@ -233,11 +243,15 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       return;
     }
     //clear vertices
-    eyePaths[index].vert[currDepth].position = glm::vec3(0,0,0);
-    eyePaths[index].vert[currDepth].colorAcc = glm::vec3(0,0,0);
-    eyePaths[index].vert[currDepth].isValid  = 1;
-    eyePaths[index].vert[currDepth].hitLight = 0;
+    eyePaths[index].vert[currDepth].position    = glm::vec3(0,0,0);
+    eyePaths[index].vert[currDepth].colorAcc    = glm::vec3(0,0,0);
+    eyePaths[index].vert[currDepth].directLight = glm::vec3(0,0,0);
+    eyePaths[index].vert[currDepth].isValid     = 1;
+    eyePaths[index].vert[currDepth].hitLight    = 0;
     
+    //random number generator
+    thrust::default_random_engine rng(hash(index * (time + currDepth)));
+    thrust::uniform_real_distribution<float> u01(0,1);
     
     //get variables
     ray thisRay     = rayList[index].RAY;
@@ -275,12 +289,34 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       eyePaths[index].vert[currDepth].hitLight = 1;
       eyePaths[index].vert[currDepth].colorAcc = COLOR;
       eyePaths[index].vert[currDepth].isValid = 1;
+      
+      //save intersection point to eyePath
+      eyePaths[index].vert[currDepth].position = intersectPoint;
+      
+      //Calculate directLight contribution
+      float solidAngle = 1.0;
+      glm::vec3 directLight = mat.color * mat.emittance;
+      
+      //update variables
+      float pdfWeight = 0;
+      calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight); 
+
+      //update struct
+      rayList[index].RAY   = thisRay;
+      rayList[index].color = COLOR;
+      
+      if(currDepth == 0){
+        eyePaths[index].vert[currDepth].pathProbability = pdfWeight;
+      }else{
+        eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
+      }
+      eyePaths[index].vert[currDepth].directLight = directLight;
+      eyePaths[index].vert[currDepth].solidAngle = solidAngle;
+      rayList[index].isValid = 0;
       return;
     }
     
-    //random number generator
-    thrust::default_random_engine rng(hash(index * (time + currDepth)));
-    thrust::uniform_real_distribution<float> u01(0,1);
+    
     
     //Calculate directLight contribution
     float solidAngle = 0.0;
@@ -299,7 +335,6 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     
     //save color to eyePath
     eyePaths[index].vert[currDepth].colorAcc = COLOR;
-    eyePaths[index].vert[currDepth].isValid = 1;
     if(currDepth == 0){
       eyePaths[index].vert[currDepth].pathProbability = pdfWeight;
     }else{
@@ -370,7 +405,7 @@ __global__ void RenderColor(glm::vec2 resolution, glm::vec3* colors, float* imag
   //integrate light contribution Back to Front.
   if(x<=resolution.x && y<=resolution.y){
     for(int vert = traceDepth - 1; vert >= 0; vert--){
-      if(eyePaths[index].vert[vert].isValid){
+      if(eyePaths[index].vert[vert].isValid == 1 && eyePaths[index].vert[vert].hitLight == 1){
         float weight = imageWeights[index];
         float pdfWeight = eyePaths[index].vert[vert].pathProbability;
         float denom  = weight + pdfWeight;
