@@ -164,15 +164,16 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 
 __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
 	
-	glm::vec3 direction = light.translation - position; 
 
 	glm::vec3 p1 = glm::normalize(glm::vec3(1,1,1)); //point on a unit sphere
 	glm::vec3 pOnSphere = multiplyMV(light.transform, glm::vec4(p1,1.0f));//point on our sphere
 	glm::vec3 centerOfSphere = multiplyMV(light.transform, glm::vec4(0,0,0,1.0f));// center of sphere
 	
+	glm::vec3 direction = centerOfSphere - position; 
+	
 	float radius = glm::distance(pOnSphere, centerOfSphere);
 	float angle = glm::atan(radius/glm::length(direction));
-	float x = TWO_PI *(1 - glm::cos(angle));
+	float x = TWO_PI * (1.0f - glm::cos(angle));
 	return x;
 	//return (glm::dot(glm::normalize(direction), normal)/glm::length(direction)); 
 }
@@ -207,11 +208,11 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
     }//insert triangles here for meshes
     if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
       mat = materials[geoms[i].materialid];
-      if(mat.emittance < .001){ // don't count intersections with lights (AVOID SELF INTERSECTION)
+      //if(mat.emittance < .001){ // don't count intersections with lights (AVOID SELF INTERSECTION)
         distToIntersect = tmpDist;
         intersectNormal = tmpIntersectNormal;
         intersectPoint  = tmpIntersectPoint;
-      }
+      //}
     }
   }
   glm::vec3 dirColor;
@@ -229,60 +230,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   solidAngle = getSolidAngle(lights[0], intersectionPoint);
   return dirColor;
 }
-/*
-__host__ __device__ glm::vec3 BSDFContribution(staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int traceDepth, 
-	Path eyePath, float rnd1, float rnd2, material* materials){
-  
-	//First vertex (end vertex, we are going backwards)
-	ray thisRay; 
-	thisRay.origin = eyePath.vert[traceDepth-1].position; 
-	thisRay.direction = calculateRandomDirectionInHemisphere(eyePath.vert[traceDepth-1].normal, rnd1, rnd2);  //FOR DIFFUSE
-	glm::vec3 BSDFcolor = eyePath.vert[traceDepth-1].colorAcc; 
-	
-	glm::vec3 inDirection = thisRay.direction; 
 
-	for(int vert = traceDepth - 2; vert >= 0; vert--){
-		if(eyePath.vert[vert].isValid == 1 && eyePath.vert[vert].hitLight == 1){
-		//intersection checks
-		float distToIntersect = FLT_MAX; 
-		float tmpDist;
-		glm::vec3 tmpIntersectPoint, intersectPoint, tmpIntersectNormal, intersectNormal;
-		material mat;
-  
-		for(int i = 0; i < numberOfGeoms; i++){
-			if (geoms[i].type == SPHERE){
-				tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-			}else if (geoms[i].type == CUBE){
-				tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-			}//insert triangles here for meshes
-			if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
-				mat = materials[geoms[i].materialid];
-			if(mat.emittance < .001){ // don't count intersections with lights (AVOID SELF INTERSECTION)
-				distToIntersect = tmpDist;
-				intersectNormal = tmpIntersectNormal;
-				intersectPoint  = tmpIntersectPoint;
-				}
-			}
-		}
-		if(distToIntersect < FLT_MAX){//no hit
-			BSDFcolor = glm::vec3(0,0,0);
-		}else{
-			material lightMaterial = materials[lights[0].materialid];
-			glm::vec3 lightColor = lightMaterial.color * lightMaterial.emittance;
-			///////////////////////////////
-			//MODIFY THIS FOR OTHER BSDFS
-			//////////////////////////////
-			BSDFcolor = BSDFcolor * getColorFromBSDF1(inDirection, thisRay.direction, intersectNormal, lightColor, m, rnd1, rnd2);
-		}
-
-		thisRay.origin = intersectPoint; 
-		thisRay.direction = inDirection;
-		return BSDFcolor;
-		}
-	}
- 
-}
-*/
 //Build Eye Path
 __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
                             staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials, 
@@ -581,7 +529,7 @@ __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, in
 
 
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
-void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms, geom* lights, int numberOfLights){
+void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms, geom* lights, int numberOfLights, int renderType){
   
   int traceDepth = 4; //determines how many bounces the raytracer traces
 
@@ -701,11 +649,13 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //connect paths and render to screen
   connectPaths<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, cudageoms, numberOfGeoms, traceDepth, eyePaths, lightPaths);
 */
-
-//RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
-//RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
-MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList);
-
+if(renderType == 0){//classic PathTracer
+  RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+}else if(renderType == 1){ //Direct Lighting Only
+  RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
+}else{//Multiple Importance Sampling
+  MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList);
+}
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 

@@ -31,6 +31,8 @@ int main(int argc, char** argv){
     }else if(strcmp(header.c_str(), "frame")==0){
       targetFrame = atoi(data.c_str());
       singleFrameMode = true;
+    }else if (strcmp(header.c_str(), "type")==0){
+      renderType = atoi(data.c_str());
     }
   }
 
@@ -110,7 +112,7 @@ void runCuda(){
     }
   
     // execute the kernel
-    cudaRaytraceCore(dptr, renderCam, targetFrame, iterations, materials, renderScene->materials.size(), geoms, renderScene->objects.size(), lights, renderScene->lights.size());
+    cudaRaytraceCore(dptr, renderCam, targetFrame, iterations, materials, renderScene->materials.size(), geoms, renderScene->objects.size(), lights, renderScene->lights.size(), renderType);
     
     // unmap buffer object
     cudaGLUnmapBufferObject(pbo);
