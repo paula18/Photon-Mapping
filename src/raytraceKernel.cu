@@ -63,8 +63,6 @@ __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time
   thrust::uniform_real_distribution<float> u02(-0.01,0.01);
 
   
-
-
   pixel = midPix + horizScale * (float)((2.0 * (x + (float)u01(rng))/resolution.x) - 1.0) + vertScale * (float)((2.0 * (y + (float)u01(rng))/resolution.y) - 1.0);
   ray r;
   
@@ -166,7 +164,6 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 
 __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
 	
-
 	glm::vec3 p1 = glm::normalize(glm::vec3(1,1,1)); //point on a unit sphere
 	glm::vec3 pOnSphere = multiplyMV(light.transform, glm::vec4(p1,1.0f));//point on our sphere
 	glm::vec3 centerOfSphere = multiplyMV(light.transform, glm::vec4(0,0,0,1.0f));// center of sphere
