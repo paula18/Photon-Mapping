@@ -63,6 +63,8 @@ __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time
   thrust::uniform_real_distribution<float> u02(-0.01,0.01);
 
   
+
+
   pixel = midPix + horizScale * (float)((2.0 * (x + (float)u01(rng))/resolution.x) - 1.0) + vertScale * (float)((2.0 * (y + (float)u01(rng))/resolution.y) - 1.0);
   ray r;
   
