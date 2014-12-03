@@ -100,15 +100,64 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 	return glm::normalize(glm::vec3(x, y, z));
 }
 
+
+
+
+
+//materialType  0 = diffuse
+__host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
+  //First randomly decide material type from material
+  int materialType = 0;//ALL DIFFUSE
+  if(materialType == 0){
+    float cos = max(glm::dot(toLight, normal),0.0);
+    glm::vec3 color = lightColor * cos * mat.color;
+    return color;
+  }else if(materialType == 1){
+    //ADD GLOSSY TEXTURE
+  }
+  return glm::vec3(0,1,1);//should be unreachable.  
+}
+
+///////////////////////////////////////////////
+// Modify for other BSDFS
+//////////////////////////////////////////////
+__host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
+                                       glm::vec3& color, material mat, float seed1, float seed2, float &pdf)
+{
+    ray newRay;
+    //Diffuse
+    newRay.direction = calculateRandomDirectionInHemisphere(normal, seed1, seed2);
+    newRay.direction = glm::normalize(newRay.direction);
+    newRay.origin = intersect + .001f * newRay.direction; //nudge in direction
+    //get Cosine of new ray and normal
+    float cos = glm::dot(newRay.direction, normal);
+    //update COLOR
+	pdf = cos;
+    color = color * mat.color * cos;
+    thisRay = newRay;
+    return 0;
+}
+
 __host__ __device__ int calculateReflective(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2){
-   ray newRay;
-   //Perfect reflective
+                                       glm::vec3& color, material mat, float seed1, float seed2)
+{
+	ray newRay;
+	 //Perfect reflective
     newRay.direction = glm::reflect(thisRay.direction, normal);
     newRay.direction = glm::normalize(newRay.direction);
     newRay.origin = intersect + .001f * newRay.direction;//nudge in direction
+	//Update COLOR
+	color = color * mat.specularColor; 
     thisRay = newRay;
     return 1;
+}
+
+__host__ __device__ float PDFSpecular(glm::vec3 incomingDir, glm::vec3 eyeDir, glm::vec3 normal, 
+	glm::vec3 lightDir, float shininess)
+{
+	glm::vec3 R = glm::reflect(incomingDir, normal); 
+	float d = glm::dot(R, eyeDir); 
+	return max(pow(d, shininess), 0.0); 
 }
 
 __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
@@ -141,39 +190,6 @@ __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, g
   return 2;
 }
 
-//materialType  0 = diffuse
-__host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
-  //First randomly decide material type from material
-  int materialType = 0;//ALL DIFFUSE
-  if(materialType == 0){
-    float cos = max(glm::dot(toLight, normal),0.0);
-    glm::vec3 color = lightColor * cos * mat.color;
-    return color;
-  }else if(materialType == 1){
-    //ADD GLOSSY TEXTURE
-  }
-  return glm::vec3(0,1,1);//should be unreachable.  
-}
-
-///////////////////////////////////////////////
-// Modify for other BSDFS
-//////////////////////////////////////////////
-__host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2){
-    ray newRay;
-    //Diffuse
-    newRay.direction = calculateRandomDirectionInHemisphere(normal, seed1, seed2);
-    newRay.direction = glm::normalize(newRay.direction);
-    newRay.origin = intersect + .001f * newRay.direction; //nudge in direction
-    //get Cosine of new ray and normal
-    float cos = glm::dot(newRay.direction, normal);
-    //update COLOR
-    color = color * mat.color * cos;
-    thisRay = newRay;
-    return 0;
-}
-
-
 
 // TODO (PARTIALLY OPTIONAL): IMPLEMENT THIS FUNCTION
 		///////////////////////////////////
@@ -186,14 +202,21 @@ __host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm:
                                        AbsorptionAndScatteringProperties& currentAbsorptionAndScattering,
                                        glm::vec3& color, glm::vec3& unabsorbedColor, material m){ */
 __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight){
+                                       glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight)
+{
   // This updates the ray directions and color
-  int materialType = calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
+	float pdf	;					
+	int materialType = calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2, pdf);
   
   //This calculates the PDFWeight
   if(materialType == 0){
-    PDFWeight = 1.0f/TWO_PI; //Karl: "the bsdf for pure diffuse is 1 if your hemisphere sampling is cosine weighted"
+    PDFWeight = pdf/PI; //Karl: "the bsdf for pure diffuse is 1 if your hemisphere sampling is cosine weighted"
     return materialType;
+  }
+
+  if(materialType == 1){
+	//  PDFWeight = PDFSpecular(
+	  return materialType; 
   }
   /*
   if((seed1 + seed2) > 1){
