@@ -164,7 +164,7 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	}
 }
 
-__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
+__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, glm::vec3 normal){
 	
 
 	glm::vec3 p1 = glm::normalize(glm::vec3(1,1,1)); //point on a unit sphere
@@ -174,10 +174,12 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
 	glm::vec3 direction = centerOfSphere - position; 
 	
 	float radius = glm::distance(pOnSphere, centerOfSphere);
-	float angle = glm::atan(radius/glm::length(direction));
-	float x = TWO_PI * (1.0f - glm::cos(angle));
-	return x;
-	//return (glm::dot(glm::normalize(direction), normal)/glm::length(direction)); 
+	float dist = glm::length(direction); 
+	float angle = glm::atan(radius/dist);
+	float solid = TWO_PI * (1.0f - glm::cos(angle));
+	//return solid;
+	//Convert to PDFWeight
+	return solid * (dist * dist) / abs(glm::dot(normal,direction));
 }
 
 __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int numberOfLights, 
@@ -229,7 +231,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
     dirColor = getColorFromBSDF(inDirection, thisRay.direction, normal, lightColor, m);
   }
   //calculate solid angle
-  solidAngle = getSolidAngle(lights[0], intersectionPoint);
+  solidAngle = getSolidAngle(lights[0], intersectionPoint, normal);
   return dirColor;
 }
 

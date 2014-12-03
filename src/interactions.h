@@ -192,7 +192,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
   
   //This calculates the PDFWeight
   if(materialType == 0){
-    PDFWeight = 1.0f/TWO_PI; //Karl: "the bsdf for pure diffuse is 1 if your hemisphere sampling is cosine weighted"
+    PDFWeight = glm::clamp( glm::dot( normal, thisRay.direction ), 0.0f, 1.0f )*INV_PI;
     return materialType;
   }
   /*
