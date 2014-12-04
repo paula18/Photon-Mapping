@@ -50,12 +50,46 @@ __host__ __device__ glm::vec3 calculateReflectionDirection(glm::vec3 normal, glm
 }
 
 // TODO (OPTIONAL): IMPLEMENT THIS FUNCTION
-__host__ __device__ Fresnel calculateFresnel(glm::vec3 normal, glm::vec3 incident, float incidentIOR, float transmittedIOR, glm::vec3 reflectionDirection, glm::vec3 transmissionDirection) {
-  Fresnel fresnel;
+__host__ __device__ Fresnel calculateFresnel(glm::vec3 normal, glm::vec3 incident, float incidentIOR, float transmittedIOR)
+{
+	Fresnel fresnel;
 
-  fresnel.reflectionCoefficient = 1;
-  fresnel.transmissionCoefficient = 0;
-  return fresnel;
+	float n12 = incidentIOR / transmittedIOR; 
+
+	float cosThetaI = -1.0f * glm::dot(incident, normal); 
+	float sin2ThetaT = n12 * n12 * (1 - cosThetaI * cosThetaI); 
+	float cosThetaT = sqrt(1 - sin2ThetaT);
+
+	float a = (incidentIOR - transmittedIOR) / (incidentIOR + transmittedIOR);
+	float R0 = a * a;
+
+	float b5 = (1 - cosThetaI) * (1 - cosThetaI) * (1 - cosThetaI) * (1 - cosThetaI)
+		  * (1 - cosThetaI);
+
+	float c5 = (1 - cosThetaT) * (1 - cosThetaT) * (1 - cosThetaT) * (1 - cosThetaT) 
+		  * (1 - cosThetaT); 
+
+	float Rschlick; 
+	float Tschlick; 
+
+
+	//Schlick's approx
+	if ( incidentIOR <= transmittedIOR)
+		  Rschlick = R0 + (1 - R0) * b5; 
+	
+	else if ( (incidentIOR > transmittedIOR) && (sin2ThetaT <= 1.0f) )
+		  Rschlick = R0 + (1 - R0) * c5; 
+	  
+	else if ( (incidentIOR > transmittedIOR) && (sin2ThetaT > 1.0f) )
+		  Rschlick = 1; 
+
+	Tschlick = 1 - Rschlick; 
+
+	
+	fresnel.reflectionCoefficient = Rschlick;
+	fresnel.transmissionCoefficient = Tschlick;
+	
+	return fresnel;
 }
 
 // LOOK: This function demonstrates cosine weighted random direction generation in a sphere!
@@ -101,28 +135,26 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 }
 
 
-
-
-
 //materialType  0 = diffuse
 __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
   //First randomly decide material type from material
-  int materialType = 0;//ALL DIFFUSE
-  if(materialType == 0){
+  if(!mat.hasReflective && !mat.hasRefractive)
+{
     float cos = max(glm::dot(toLight, normal),0.0);
     glm::vec3 color = lightColor * cos * mat.color;
     return color;
-  }else if(materialType == 1){
-    //ADD GLOSSY TEXTURE
-  }
-  return glm::vec3(0,1,1);//should be unreachable.  
+	}else {
+		glm::vec3 color = lightColor * mat.specularColor;
+		return color;
+	}
+	return glm::vec3(0,1,1);//should be unreachable.  
 }
 
 ///////////////////////////////////////////////
 // Modify for other BSDFS
 //////////////////////////////////////////////
 __host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2, float &pdf)
+                                       glm::vec3& color, material mat, float seed1, float seed2)
 {
     ray newRay;
     //Diffuse
@@ -132,7 +164,6 @@ __host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm:
     //get Cosine of new ray and normal
     float cos = glm::dot(newRay.direction, normal);
     //update COLOR
-	pdf = cos;
     color = color * mat.color * cos;
     thisRay = newRay;
     return 0;
@@ -152,14 +183,16 @@ __host__ __device__ int calculateReflective(ray& thisRay, glm::vec3 intersect, g
     return 1;
 }
 
-__host__ __device__ float PDFSpecular(glm::vec3 incomingDir, glm::vec3 eyeDir, glm::vec3 normal, 
-	glm::vec3 lightDir, float shininess)
+
+__host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm::vec3 normal, float shininess)
 {
-	glm::vec3 R = glm::reflect(incomingDir, normal); 
-	float d = glm::dot(R, eyeDir); 
-	return max(pow(d, shininess), 0.0); 
+	glm::vec3 R = glm::reflect(-viewDir, normal); 
+	float d = glm::dot(R, lightDir); 
+	return max(pow(d, shininess), 0.0)*INV_PI; 
 }
 
+
+/*
 __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2){
 //consulted Bram de Grave paper 2006 Reflections and Refractions in Ray Tracing for help with algorithm.
@@ -189,7 +222,13 @@ __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, g
   thisRay = newRay;
   return 2;
 }
+*/
+__host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float rnd2){
 
+	glm::vec3 lightPos = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
+	lightPos = multiplyMV(lights[0].transform, glm::vec4(lightPos,1.0f));         // translate to point on light
+	return lightPos;
+}
 
 // TODO (PARTIALLY OPTIONAL): IMPLEMENT THIS FUNCTION
 		///////////////////////////////////
@@ -202,22 +241,32 @@ __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, g
                                        AbsorptionAndScatteringProperties& currentAbsorptionAndScattering,
                                        glm::vec3& color, glm::vec3& unabsorbedColor, material m){ */
 __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight)
+                                       glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight, staticGeom *lights)
 {
   // This updates the ray directions and color
 	float pdf	;					
-	int materialType = calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2, pdf);
+	int materialType;
   
-  //This calculates the PDFWeight
-  if(materialType == 0){
-    PDFWeight = pdf/PI; //Karl: "the bsdf for pure diffuse is 1 if your hemisphere sampling is cosine weighted"
-    return materialType;
-  }
+  //Diffuse
+	if(!mat.hasReflective && !mat.hasRefractive)
+	{
+		calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
 
-  if(materialType == 1){
-	//  PDFWeight = PDFSpecular(
-	  return materialType; 
-  }
+		PDFWeight = glm::clamp( glm::dot( normal, thisRay.direction ), 0.0f, 1.0f )*INV_PI;
+		return materialType;
+	}
+	//Perfect reflection
+	else if (mat.hasReflective && !mat.hasRefractive){
+		calculateReflective(thisRay, intersect, normal, color, mat, seed1, seed2);
+		glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
+		glm::vec3 lightDir = lightPos - intersect; 
+		PDFWeight = PDFSpecular(thisRay.direction, lightDir, normal, 3.0);
+		return materialType; 
+	}
+	else if (mat.hasRefractive){
+		PDFWeight = 1.0f; 
+		return materialType; 
+	}
   /*
   if((seed1 + seed2) > 1){
     //check reflectance first

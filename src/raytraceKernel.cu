@@ -162,7 +162,7 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 	}
 }
 
-__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
+__host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, glm::vec3 normal){
 	
 	glm::vec3 p1 = glm::normalize(glm::vec3(1,1,1)); //point on a unit sphere
 	glm::vec3 pOnSphere = multiplyMV(light.transform, glm::vec4(p1,1.0f));//point on our sphere
@@ -171,11 +171,14 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position){
 	glm::vec3 direction = centerOfSphere - position; 
 	
 	float radius = glm::distance(pOnSphere, centerOfSphere);
-	float angle = glm::atan(radius/glm::length(direction));
-	float x = TWO_PI * (1.0f - glm::cos(angle));
-	return x;
-	//return (glm::dot(glm::normalize(direction), normal)/glm::length(direction)); 
+	float dist = glm::length(direction); 
+	float angle = glm::atan(radius/dist);
+	float solid = TWO_PI * (1.0f - glm::cos(angle));
+	//return solid;
+	//Convert to PDFWeight
+	return solid * (dist * dist) / abs(glm::dot(normal,direction));
 }
+
 
 __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int numberOfLights, 
 	material* materials, glm::vec3 normal, glm::vec3 inDirection, glm::vec3 intersectionPoint, float rnd1, float rnd2, float& solidAngle){
@@ -185,8 +188,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   ////////////////////////////////////////////////
   
   //Get random point on light
-  glm::vec3 lightPOS = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
-  lightPOS = multiplyMV(lights[0].transform, glm::vec4(lightPOS,1.0f));         // translate to point on light
+  glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 
   float dist = glm::distance(lightPOS, intersectionPoint);
   
   //make ray
@@ -226,7 +228,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
     dirColor = getColorFromBSDF(inDirection, thisRay.direction, normal, lightColor, m);
   }
   //calculate solid angle
-  solidAngle = getSolidAngle(lights[0], intersectionPoint);
+  solidAngle = getSolidAngle(lights[0], intersectionPoint, normal);
   return dirColor;
 }
 
@@ -302,7 +304,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       
       //update variables
       float pdfWeight = 0;
-      calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight); 
+      calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight, lights); 
 
       //update struct
       rayList[index].RAY   = thisRay;
@@ -336,7 +338,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     
     //update variables
     float pdfWeight = 0;
-    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight); 
+    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight, lights); 
 
     //update struct
     rayList[index].RAY   = thisRay;
