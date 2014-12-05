@@ -141,7 +141,7 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 		glm::vec3 color = lightColor * cos * mat.color;
 		return color;
 	}
-	else 
+	else if (mat.type == 1)
 	{
 		glm::vec3 color = lightColor * mat.specularColor;
 		return color;
@@ -191,11 +191,8 @@ __host__ __device__ float PDFDiffuse(glm::vec3 normal, glm::vec3 direction)
 __host__ __device__ void calculateDiffuseBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight)
 {
-	
 	calculateDiffuseDirection(thisRay, intersect, normal, color, mat, seed1, seed2);
-
 	PDFWeight = PDFDiffuse(normal, thisRay.direction);
-
 }
 
 ///////////////////////////////////////////////
@@ -203,7 +200,7 @@ __host__ __device__ void calculateDiffuseBSDF(ray& thisRay, glm::vec3 intersect,
 //////////////////////////////////////////////
 
 __host__ __device__ int calculateReflectiveDirection(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2)
+                                       glm::vec3& color, material mat)
 {
 	ray newRay;
 	 //Perfect reflective
@@ -221,13 +218,13 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 {
 	glm::vec3 R = glm::reflect(-viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
-	return max(pow(d, shininess), 0.0)*INV_PI; 
+	return max(pow(d, shininess), 0.0)*shininess*INV_PI; 
 }
 
 __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2, staticGeom * lights, float &PDFWeight)
 {
-	calculateReflectiveDirection(thisRay, intersect, normal, color, mat, seed1, seed2);
+	calculateReflectiveDirection(thisRay, intersect, normal, color, mat);
 	glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
 	glm::vec3 lightDir = lightPos - intersect; 
 	PDFWeight = PDFSpecular(thisRay.direction, lightDir, normal, 3.0);
@@ -279,7 +276,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 	int materialType;
   
   //Diffuse
-	if(mat.type == 0)
+	if(mat.type == 0 || mat.type == 9)
 	{
 		calculateDiffuseBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, PDFWeight); 
 		return materialType;

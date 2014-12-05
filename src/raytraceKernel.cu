@@ -174,11 +174,15 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, gl
 	float dist = glm::length(direction); 
 	float angle = glm::atan(radius/dist);
 	float solid = TWO_PI * (1.0f - glm::cos(angle));
-	//return solid;
+	return solid;
 	//Convert to PDFWeight
-	return solid * (dist * dist) / abs(glm::dot(normal,direction));
+	//return solid * (dist * dist) / abs(glm::dot(normal,bsdfdir));
 }
 
+__host__ __device__ float convertSolidAngle(float value, float dist, float cos){
+	return value * dist * dist / abs(cos); 
+
+}
 __host__ __device__ float intersectionTest(staticGeom* geoms, int numberOfGeoms, int& materialID, ray thisRay, float distToIntersect, glm::vec3& intersectNormal, glm::vec3& intersectPoint){
   float tmpDist;
   glm::vec3 tmpIntersectPoint, tmpIntersectNormal;
@@ -286,7 +290,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       v.hitLight = 1;
       v.isValid = 1;
     }else{
-      solidAngle = 0.0;
+	  solidAngle = 0.0;
       directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle); //updates solidAngle as side effect
     }
     //save intersection point to eyePath
@@ -313,9 +317,8 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     }else{
       v.pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
     }
-    
     v.directLight = directLight;
-    v.solidAngle = solidAngle;
+    v.solidAngle = convertSolidAngle(solidAngle, distToIntersect, glm::dot(intersectNormal, thisRay.direction)) * solidAngle;
     v.pdfWeight = pdfWeight;  //probability of this bounce only
     eyePaths[index].vert[currDepth] = v;
   }
@@ -439,7 +442,7 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
           
           //update incoming color
-          solidAngle  = eyePaths[index].vert[vert].solidAngle;
+          solidAngle  = 0;//eyePaths[index].vert[vert].solidAngle;
           directLight = eyePaths[index].vert[vert].directLight;
           
           // balance heuristic to update incolor
