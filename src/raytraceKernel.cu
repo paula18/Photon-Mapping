@@ -179,6 +179,25 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, gl
 	return solid * (dist * dist) / abs(glm::dot(normal,direction));
 }
 
+__host__ __device__ float intersectionTest(staticGeom* geoms, int numberOfGeoms, int& materialID, ray thisRay, float distToIntersect, glm::vec3& intersectNormal, glm::vec3& intersectPoint){
+  float tmpDist;
+  glm::vec3 tmpIntersectPoint, tmpIntersectNormal;
+  for(int i = 0; i < numberOfGeoms; i++){
+    staticGeom geometry = geoms[i];
+    if (geometry.type == SPHERE){
+      tmpDist = sphereIntersectionTest(geometry, thisRay, tmpIntersectPoint, tmpIntersectNormal);
+    }else if (geometry.type == CUBE){
+      tmpDist = boxIntersectionTest(   geometry, thisRay, tmpIntersectPoint, tmpIntersectNormal);
+    }//insert triangles here for meshes
+    if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
+      materialID = geometry.materialid;//index of hit material
+      distToIntersect = tmpDist;
+      intersectNormal = tmpIntersectNormal;
+      intersectPoint  = tmpIntersectPoint;
+    }
+  }
+  return distToIntersect;
+}
 
 __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* geoms, int numberOfGeoms, staticGeom* lights, int numberOfLights, 
 	material* materials, glm::vec3 normal, glm::vec3 inDirection, glm::vec3 intersectionPoint, float rnd1, float rnd2, float& solidAngle){
@@ -197,25 +216,10 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   thisRay.direction = glm::normalize(lightPOS - thisRay.origin);
   //intersection checks
   float distToIntersect = dist; //distance to light intersection
-  float tmpDist;
-  glm::vec3 tmpIntersectPoint, intersectPoint, tmpIntersectNormal, intersectNormal;
-  material mat;
+  int materialID;                            //updated in intersectionTest
+  glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+  distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
   
-  for(int i = 0; i < numberOfGeoms; i++){
-    if (geoms[i].type == SPHERE){
-      tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-    }else if (geoms[i].type == CUBE){
-      tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-    }//insert triangles here for meshes
-    if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
-      mat = materials[geoms[i].materialid];
-      //if(mat.emittance < .001){ // don't count intersections with lights (AVOID SELF INTERSECTION)
-        distToIntersect = tmpDist;
-        intersectNormal = tmpIntersectNormal;
-        intersectPoint  = tmpIntersectPoint;
-      //}
-    }
-  }
   glm::vec3 dirColor;
   if(distToIntersect < dist){//in shadow
     dirColor = glm::vec3(0,0,0);
@@ -241,16 +245,15 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
   if((x<=resolution.x && y<=resolution.y)){
-    if(rayList[index].isValid == 0){
+    rayState rs = rayList[index];
+    if(rs.isValid == 0){
       eyePaths[index].vert[currDepth].isValid = 0;
       return;
     }
     //clear vertices
-    eyePaths[index].vert[currDepth].position    = glm::vec3(0,0,0);
-    eyePaths[index].vert[currDepth].colorAcc    = glm::vec3(0,0,0);
-    eyePaths[index].vert[currDepth].directLight = glm::vec3(0,0,0);
-    eyePaths[index].vert[currDepth].isValid     = 1;
-    eyePaths[index].vert[currDepth].hitLight    = 0;
+    vertex v;
+    v.isValid  = 1;
+    v.hitLight = 0;
     
     
     //random number generator
@@ -258,107 +261,63 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     thrust::uniform_real_distribution<float> u01(0,1);
     
     //get variables
-    ray thisRay     = rayList[index].RAY;
-    glm::vec3 COLOR = rayList[index].color;
-    eyePaths[index].vert[currDepth].inDirection = thisRay.direction;
+    ray thisRay     = rs.RAY;
+    glm::vec3 COLOR = rs.color;
+    v.inDirection = thisRay.direction;
     
     //intersection checks:
-    float distToIntersect = FLT_MAX;//infinite distance
-    float tmpDist;
-    glm::vec3 tmpIntersectPoint, tmpIntersectNormal, intersectPoint, intersectNormal;
-    material mat;
+    float distToIntersect = FLT_MAX;
+    int materialID = 0;                        //updated in intersectionTest
+    glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+    distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
+    material mat = materials[materialID];
     
-    for(int i = 0; i < numberOfGeoms; i++){
-      if (geoms[i].type == SPHERE){
-        tmpDist = sphereIntersectionTest(geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-      }else if (geoms[i].type == CUBE){
-        tmpDist = boxIntersectionTest(   geoms[i], thisRay, tmpIntersectPoint, tmpIntersectNormal);
-      }//insert triangles here for meshes
-      if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
-        distToIntersect = tmpDist;
-        intersectNormal = tmpIntersectNormal;
-        intersectPoint  = tmpIntersectPoint;
-        mat = materials[geoms[i].materialid];
-      }
-    }
+    float solidAngle;
+    glm::vec3 directLight;
     
-    //Did I intersect anything?
     if(distToIntersect == FLT_MAX){//miss
-      //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (glm::vec3(0,0,0) * 1.0f/time); //UPDATE PIXEL COLOR
-      eyePaths[index].vert[currDepth].isValid = 0;
+      v.isValid = 0;
       rayList[index].isValid = 0;
       return;
     }else if(mat.emittance > 0.001){  //is this a light source?
-      COLOR = COLOR * (mat.color * mat.emittance);
-      //colors[rayList[index].photoIDX] = (colors[rayList[index].photoIDX] * (time - 1.0f)/time) + (COLOR * 1.0f/time); // UPDATE PIXEL COLOR
-      eyePaths[index].vert[currDepth].hitLight = 1;
-      eyePaths[index].vert[currDepth].colorAcc = COLOR;
-      eyePaths[index].vert[currDepth].isValid = 1;
-      
-      //save intersection point to eyePath
-      eyePaths[index].vert[currDepth].position = intersectPoint;
-      
-      //Calculate directLight contribution
-      float solidAngle = 1.0;
-      glm::vec3 directLight = mat.color * mat.emittance;
-      
-      //update variables
-      float pdfWeight = 0;
-      calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight, lights); 
-
-      //update struct
-      rayList[index].RAY   = thisRay;
-      rayList[index].color = COLOR;
-
-      eyePaths[index].vert[currDepth].colorAcc = COLOR; 
-      eyePaths[index].vert[currDepth].normal = intersectNormal;
-      eyePaths[index].vert[currDepth].outDirection = thisRay.direction; 
-      eyePaths[index].vert[currDepth].mat = mat;
-      
-      if(currDepth == 0){
-        eyePaths[index].vert[currDepth].pathProbability = pdfWeight;
-      }else{
-        eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
-      }
-      eyePaths[index].vert[currDepth].directLight = directLight;
-      eyePaths[index].vert[currDepth].solidAngle = solidAngle;
-      eyePaths[index].vert[currDepth].pdfWeight = pdfWeight;  //probability of this bounce only
-      rayList[index].isValid = 0;
-      return;
+      solidAngle = 0.0;//noDirectLight
+      directLight = (mat.color * mat.emittance);
+      COLOR = COLOR * directLight;
+      v.hitLight = 1;
+      v.isValid = 1;
+    }else{
+      solidAngle = 0.0;
+      directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle); //updates solidAngle as side effect
     }
-    
-    
-    
-    //Calculate directLight contribution
-    float solidAngle = 0.0;
-    glm::vec3 directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle);
-    
     //save intersection point to eyePath
-    eyePaths[index].vert[currDepth].position = intersectPoint;
+    v.position = intersectPoint;
     
     //update variables
     float pdfWeight = 0;
     calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight, lights); 
 
-    //update struct
-    rayList[index].RAY   = thisRay;
-    rayList[index].color = COLOR;
+    //update rayList
+    rs.RAY   = thisRay;
+    rs.color = COLOR;
+    rayList[index] = rs;
     
     //save color to eyePath
-    eyePaths[index].vert[currDepth].colorAcc = COLOR; //Saves color at each vertex although i think we only need the last one???
-    eyePaths[index].vert[currDepth].normal = intersectNormal;
-    eyePaths[index].vert[currDepth].outDirection = thisRay.direction; 
-    eyePaths[index].vert[currDepth].mat = mat;
+    v.colorAcc = COLOR; //Saves color at each vertex although i think we only need the last one???
+    v.normal = intersectNormal;
+    v.outDirection = thisRay.direction; 
+    v.mat = mat;
 
+    //update PathProbability
     if(currDepth == 0){
-      eyePaths[index].vert[currDepth].pathProbability = pdfWeight;
+      v.pathProbability = pdfWeight;
     }else{
-      eyePaths[index].vert[currDepth].pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
+      v.pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
     }
     
-    eyePaths[index].vert[currDepth].directLight = directLight;
-    eyePaths[index].vert[currDepth].solidAngle = solidAngle;
-    eyePaths[index].vert[currDepth].pdfWeight = pdfWeight;  //probability of this bounce only
+    v.directLight = directLight;
+    v.solidAngle = solidAngle;
+    v.pdfWeight = pdfWeight;  //probability of this bounce only
+    eyePaths[index].vert[currDepth] = v;
   }
 }
 
@@ -376,26 +335,15 @@ __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* ima
       for (int idx = 0; idx < traceDepth; idx++){//traceDepth - 4; // First bounce of light
         for(int eyeVert = 0; eyeVert < traceDepth; eyeVert++){
           if (eyePaths[index].vert[eyeVert].isValid != 0 && lightPaths[lightIDX].vert[idx].isValid != 0){
-            ray r; 
-            r.origin = eyePaths[index].vert[eyeVert].position; 
-            r.direction = glm::normalize(lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position);
+            ray thisRay; 
+            thisRay.origin = eyePaths[index].vert[eyeVert].position; 
+            thisRay.direction = glm::normalize(lightPaths[lightIDX].vert[idx].position - eyePaths[index].vert[eyeVert].position);
             //check intersection of this ray with scene
-            float dist = glm::distance(lightPaths[lightIDX].vert[idx].position, r.origin);
-            float distToIntersect = dist; //FLT_MAX;//infinite distance
-            float tmpDist;
-            glm::vec3 tmpIntersectPoint, tmpIntersectNormal;
-    
-            for(int i = 0; i < numberOfGeoms; i++){
-            	if (geoms[i].type == SPHERE){
-            		tmpDist = sphereIntersectionTest(geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
-            	}else if (geoms[i].type == CUBE){
-            		tmpDist = boxIntersectionTest(   geoms[i], r, tmpIntersectPoint, tmpIntersectNormal);
-            	}//insert triangles here for meshes  //TODO: ADD MESH STUFF
-            //update distance
-              if (tmpDist != -1 && tmpDist < distToIntersect){ //hit is new closest
-                distToIntersect = tmpDist;
-              }
-            }
+            float dist = glm::distance(lightPaths[lightIDX].vert[idx].position, thisRay.origin);
+            float distToIntersect = dist;
+            int materialID = 0;                        //updated in intersectionTest
+            glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+            distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
             
             if(distToIntersect == dist){ //no intersection, we can add color
             	 //change weight calculation when we add other materials

@@ -92,7 +92,6 @@ __host__ __device__ Fresnel calculateFresnel(glm::vec3 normal, glm::vec3 inciden
 	return fresnel;
 }
 
-// LOOK: This function demonstrates cosine weighted random direction generation in a sphere!
 __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 normal, float xi1, float xi2) {
     
     // Crucial difference between this and calculateRandomDirectionInSphere: THIS IS COSINE WEIGHTED!
@@ -121,9 +120,7 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 nor
 }
 
 
-// Now that you know how cosine weighted direction generation works, try implementing 
-// non-cosine (uniform) weighted random direction generation.
-// This should be much easier than if you had to implement calculateRandomDirectionInHemisphere.
+
 __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, glm::vec3 center) {
 	float alpha = xi2 * TWO_PI; 
 	float phi = glm::acos(2 * xi1 - 1);
@@ -230,16 +227,7 @@ __host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float 
 	return lightPos;
 }
 
-// TODO (PARTIALLY OPTIONAL): IMPLEMENT THIS FUNCTION
-		///////////////////////////////////
-		//////////////////////////////////
-		// TODO: IMPLEMENT THIS FUNCTION/
-		////////////////////////////////
-		///////////////////////////////
-// Returns 0 if diffuse scatter, 1 if reflected, 2 if transmitted.
-/*__host__ __device__ int calculateBSDF(ray& r, glm::vec3 intersect, glm::vec3 normal, glm::vec3 emittedColor,
-                                       AbsorptionAndScatteringProperties& currentAbsorptionAndScattering,
-                                       glm::vec3& color, glm::vec3& unabsorbedColor, material m){ */
+
 __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight, staticGeom *lights)
 {
@@ -267,27 +255,6 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 		PDFWeight = 1.0f; 
 		return materialType; 
 	}
-  /*
-  if((seed1 + seed2) > 1){
-    //check reflectance first
-    if(seed2 < mat.hasReflective){ 
-      return calculateReflective(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }else if (seed2 < mat.hasRefractive){
-      return calculateRefractive(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }else{
-      return calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }
-  }else{
-    //check refractive first
-    if(seed1 < mat.hasRefractive){
-      return calculateRefractive(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }else if (seed1 < mat.hasReflective){
-      return calculateReflective(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }else{
-      return calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
-    }
-  }
-  */
 };
 
 #endif
