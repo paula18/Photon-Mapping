@@ -279,7 +279,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       v.isValid = 0;
       rayList[index].isValid = 0;
       return;
-    }else if(mat.emittance > 0.001){  //is this a light source?
+    }else if(mat.type == 9){  //is this a light source?
       solidAngle = 0.0;//noDirectLight
       directLight = (mat.color * mat.emittance);
       COLOR = COLOR * directLight;
@@ -567,9 +567,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&lightrayList, 10 * sizeof(rayState));
 
   
- 
-
-  // kernel launches
+ // kernel launches
   //Get initial rays
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
 

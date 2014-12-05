@@ -66,6 +66,7 @@ struct camera {
 };
 
 struct material{
+	int type; //Diffuse = 0; perfect spec = 1; frenel = 2; light = 9
 	glm::vec3 color;
 	float specularExponent;
 	glm::vec3 specularColor;

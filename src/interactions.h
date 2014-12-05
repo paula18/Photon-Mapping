@@ -135,23 +135,38 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 //materialType  0 = diffuse
 __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
   //First randomly decide material type from material
-  if(!mat.hasReflective && !mat.hasRefractive)
-{
-    float cos = max(glm::dot(toLight, normal),0.0);
-    glm::vec3 color = lightColor * cos * mat.color;
-    return color;
-	}else {
+	if(mat.type == 0)
+	{
+		float cos = max(glm::dot(toLight, normal),0.0);
+		glm::vec3 color = lightColor * cos * mat.color;
+		return color;
+	}
+	else 
+	{
 		glm::vec3 color = lightColor * mat.specularColor;
 		return color;
 	}
 	return glm::vec3(0,1,1);//should be unreachable.  
 }
 
+__host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float rnd2)
+{
+
+	glm::vec3 lightPos = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
+	lightPos = multiplyMV(lights[0].transform, glm::vec4(lightPos,1.0f));         // translate to point on light
+	return lightPos;
+}
 ///////////////////////////////////////////////
-// Modify for other BSDFS
+// BSDFs CALCULATIONS
 //////////////////////////////////////////////
-__host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
-                                       glm::vec3& color, material mat, float seed1, float seed2)
+
+///////////////////////////////////////////////
+// DIFFUSE
+//////////////////////////////////////////////
+
+//Updates color and ray
+__host__ __device__ int calculateDiffuseDirection(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
+                                      glm::vec3& color, material mat, float seed1, float seed2)
 {
     ray newRay;
     //Diffuse
@@ -166,7 +181,28 @@ __host__ __device__ int calculateDiffuse(ray& thisRay, glm::vec3 intersect, glm:
     return 0;
 }
 
-__host__ __device__ int calculateReflective(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
+//Returns PDF for diffuse materials
+__host__ __device__ float PDFDiffuse(glm::vec3 normal, glm::vec3 direction)
+{
+	return glm::clamp( glm::dot( normal, direction ), 0.0f, 1.0f )*INV_PI;
+}
+
+//Stores color, PDFWeight and updates ray. 
+__host__ __device__ void calculateDiffuseBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
+                                       glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight)
+{
+	
+	calculateDiffuseDirection(thisRay, intersect, normal, color, mat, seed1, seed2);
+
+	PDFWeight = PDFDiffuse(normal, thisRay.direction);
+
+}
+
+///////////////////////////////////////////////
+// PERFECT SPECULAR
+//////////////////////////////////////////////
+
+__host__ __device__ int calculateReflectiveDirection(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2)
 {
 	ray newRay;
@@ -186,6 +222,16 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 	glm::vec3 R = glm::reflect(-viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
 	return max(pow(d, shininess), 0.0)*INV_PI; 
+}
+
+__host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
+                                       glm::vec3& color, material mat, float seed1, float seed2, staticGeom * lights, float &PDFWeight)
+{
+	calculateReflectiveDirection(thisRay, intersect, normal, color, mat, seed1, seed2);
+	glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
+	glm::vec3 lightDir = lightPos - intersect; 
+	PDFWeight = PDFSpecular(thisRay.direction, lightDir, normal, 3.0);
+
 }
 
 
@@ -220,13 +266,10 @@ __host__ __device__ int calculateRefractive(ray& thisRay, glm::vec3 intersect, g
   return 2;
 }
 */
-__host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float rnd2){
 
-	glm::vec3 lightPos = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
-	lightPos = multiplyMV(lights[0].transform, glm::vec4(lightPos,1.0f));         // translate to point on light
-	return lightPos;
-}
-
+///////////////////////////////////////////////
+// GENERAL BSDF CALCULATION 
+//////////////////////////////////////////////
 
 __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
                                        glm::vec3& color, material mat, float seed1, float seed2, float& PDFWeight, staticGeom *lights)
@@ -236,25 +279,21 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 	int materialType;
   
   //Diffuse
-	if(!mat.hasReflective && !mat.hasRefractive)
+	if(mat.type == 0)
 	{
-		calculateDiffuse(thisRay, intersect, normal, color, mat, seed1, seed2);
-
-		PDFWeight = glm::clamp( glm::dot( normal, thisRay.direction ), 0.0f, 1.0f )*INV_PI;
+		calculateDiffuseBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, PDFWeight); 
 		return materialType;
 	}
 	//Perfect reflection
-	else if (mat.hasReflective && !mat.hasRefractive){
-		calculateReflective(thisRay, intersect, normal, color, mat, seed1, seed2);
-		glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
-		glm::vec3 lightDir = lightPos - intersect; 
-		PDFWeight = PDFSpecular(thisRay.direction, lightDir, normal, 3.0);
+	else if (mat.type == 1)
+	{
+		calculateSpecularBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, lights, PDFWeight);
 		return materialType; 
 	}
-	else if (mat.hasRefractive){
+	/*else if (mat.type == 2){
 		PDFWeight = 1.0f; 
 		return materialType; 
-	}
+	}*/
 };
 
 #endif

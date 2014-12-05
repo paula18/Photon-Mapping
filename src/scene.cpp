@@ -248,11 +248,13 @@ int scene::loadMaterial(string materialid){
 		material newMaterial;
 	
 		//load static properties
-		for(int i=0; i<10; i++){
+		for(int i=0; i<11; i++){
 			string line;
             utilityCore::safeGetline(fp_in,line);
 			vector<string> tokens = utilityCore::tokenizeString(line);
-			if(strcmp(tokens[0].c_str(), "RGB")==0){
+			if(strcmp(tokens[0].c_str(), "TYPE")==0){
+				newMaterial.type = atoi(tokens[1].c_str());
+			}else if(strcmp(tokens[0].c_str(), "RGB")==0){
 				glm::vec3 color( atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()) );
 				newMaterial.color = color;
 			}else if(strcmp(tokens[0].c_str(), "SPECEX")==0){
