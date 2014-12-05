@@ -206,6 +206,11 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
   
+  if(m.type == 1){
+    solidAngle = 0;
+    return glm::vec3(1);
+  }
+  
   //Get random point on light
   glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 
   float dist = glm::distance(lightPOS, intersectionPoint);

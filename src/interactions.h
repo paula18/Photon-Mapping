@@ -221,7 +221,8 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 {
 	glm::vec3 R = glm::reflect(-viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
-	return max(pow(d, shininess), 0.0)*INV_PI; 
+	//return max(pow(d, shininess), 0.0)*INV_PI; 
+	return 1;
 }
 
 __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
@@ -279,7 +280,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 	int materialType;
   
   //Diffuse
-	if(mat.type == 0)
+	if(mat.type == 0 || mat.type ==9)
 	{
 		calculateDiffuseBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, PDFWeight); 
 		return materialType;
