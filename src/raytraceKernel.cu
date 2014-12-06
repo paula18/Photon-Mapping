@@ -174,9 +174,9 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, gl
 	float dist = glm::length(direction); 
 	float angle = glm::atan(radius/dist);
 	float solid = TWO_PI * (1.0f - glm::cos(angle));
-	return solid;
+	//return solid;
 	//Convert to PDFWeight
-	//return solid * (dist * dist) / abs(glm::dot(normal,bsdfdir));
+	return solid * (dist * dist) / abs(glm::dot(normal,direction));
 }
 
 __host__ __device__ float convertSolidAngle(float value, float dist, float cos){
@@ -209,6 +209,11 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //TODO: Update to support multiple light sources
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
+  
+  if(m.type == 1){
+    solidAngle = 0;
+    return glm::vec3(1);
+  }
   
   //Get random point on light
   glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 
@@ -318,7 +323,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       v.pathProbability = eyePaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
     }
     v.directLight = directLight;
-    v.solidAngle = convertSolidAngle(solidAngle, distToIntersect, glm::dot(intersectNormal, thisRay.direction)) * solidAngle;
+    v.solidAngle = solidAngle;//convertSolidAngle(solidAngle, distToIntersect, glm::dot(intersectNormal, thisRay.direction)) * solidAngle;
     v.pdfWeight = pdfWeight;  //probability of this bounce only
     eyePaths[index].vert[currDepth] = v;
   }
@@ -442,7 +447,7 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
           
           //update incoming color
-          solidAngle  = 0;//eyePaths[index].vert[vert].solidAngle;
+          solidAngle  = eyePaths[index].vert[vert].solidAngle;
           directLight = eyePaths[index].vert[vert].directLight;
           
           // balance heuristic to update incolor
