@@ -128,6 +128,7 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 nor
 
 
 __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, glm::vec3 center) {
+/*
 	float alpha = xi2 * TWO_PI; 
 	float phi = glm::acos(2 * xi1 - 1);
 	float x = center.x + (sin(phi) * cos(alpha));
@@ -135,6 +136,13 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 	float z = center.z + (cos(phi));
 
 	return glm::normalize(glm::vec3(x, y, z));
+*/
+	float theta = 2.0f * PI * xi1;
+	float phi = acos(2.0f * xi2 - 1);
+	float radius = 1.0f;
+	glm::vec3 localPosition = glm::vec3( radius * sin(theta) * cos(phi), radius * sin(theta) * sin(phi), radius * cos(phi));
+
+	return localPosition + center;
 }
 
 
@@ -149,11 +157,11 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 	}
 	else if (mat.type == 1)
 	{
-		float specPDF = PDFSpecular(inDirection, toLight, normal, 20.0);
-		glm::vec3 color = lightColor * mat.specularColor;
+		float specPDF = PDFSpecular(inDirection, toLight, normal, 100);
+		glm::vec3 color = lightColor * mat.specularColor * specPDF;
 		return color;
 	}
-	return glm::vec3(0,1,1);//should be unreachable.  
+	return lightColor;//should be unreachable.  
 }
 
 __host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float rnd2)
@@ -214,7 +222,7 @@ __host__ __device__ glm::vec3 generateDir(float seed1, float seed2, float shinin
 	float y = sin(phi)*sin(theta); 
 	float z = cos(theta); 
 
-	return glm::vec3(x, y, z); 
+	return glm::normalize(glm::vec3(x, y, z)); 
 }
 
 __host__ __device__ glm::vec3 localToWorld( glm::vec3 localDir, glm::vec3 normal )
@@ -244,8 +252,8 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 {
 	glm::vec3 R = glm::reflect(viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
-	return max(0.0, pow(d, shininess))*(shininess+1)*max(0.0f,min(1.0, sin(acos(d))))/TWO_PI;
-	///return max(0.0, pow(d, shininess))*(shininess+1)/TWO_PI;
+	//return max(0.0, pow(d, shininess))*(shininess+1)*max(0.0f,min(1.0, sin(acos(d))))/TWO_PI;
+	return glm::clamp( (float)(max(0.0f, pow(d, shininess))*(shininess+1.0f)/TWO_PI), 0.0f, 1.0f);
 	//return 1;
 }
 
@@ -253,10 +261,11 @@ __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect
                                        glm::vec3& color, material mat, float seed1, float seed2, staticGeom * lights, float &PDFWeight,
 									   float shininess)
 {
+	ray orig = thisRay;
 	calculateReflectiveDirection(thisRay, intersect, normal, color, mat, seed1, seed2, shininess);
-	glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
-	glm::vec3 lightDir = lightPos - intersect; 
-	PDFWeight = PDFSpecular(thisRay.direction, lightDir, normal, shininess);
+	//glm::vec3 lightPos = getLightPos(lights, seed1, seed2);   
+	//glm::vec3 lightDir = lightPos - intersect; 
+	PDFWeight = PDFSpecular(orig.direction, thisRay.direction, normal, shininess);
 
 }
 
@@ -314,7 +323,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 	//Perfect reflection
 	else if (mat.type == 1)
 	{
-		float shininess = 10;
+		float shininess = 100;
 		calculateSpecularBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, lights, PDFWeight, shininess);
 		return materialType; 
 	}

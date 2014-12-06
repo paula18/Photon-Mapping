@@ -152,9 +152,8 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 
 		thrust::default_random_engine rng(hash(index * time));
 		thrust::uniform_real_distribution<float> u01(-1,1);
-		thrust::uniform_real_distribution<float> u02(-1,1);
 		float random  = (float) u01(rng);
-		float random2 = (float) u02(rng);
+		float random2 = (float) u01(rng);
 
 		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random2, lightrayList[index].RAY.origin); 
 		lightrayList[index].isValid = true;
@@ -209,7 +208,6 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //TODO: Update to support multiple light sources
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
-  
   
   
   //Get random point on light
@@ -451,8 +449,9 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           solidAngle  = v.solidAngle;
           directLight = v.directLight;
           
-          //pdfWeight  *= pdfWeight;
-          //solidAngle *= solidAngle;
+          //power heuristic
+          pdfWeight  *= pdfWeight;
+          solidAngle *= solidAngle;
           
           // balance heuristic to update incolor
           float denom = solidAngle + pdfWeight;
@@ -463,8 +462,8 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     if(validRay == 1){
       //Update Pixel Color
       float weight = imageWeights[index];
-      float denom  = weight + 1.0f;//totalPDFWeight;
-      colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
+      float denom  = weight + totalPDFWeight;
+      colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
       imageWeights[index] = denom;
     }
   }
