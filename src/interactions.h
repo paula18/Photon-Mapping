@@ -13,6 +13,7 @@
 // Forward Declarations
 /////////////////////////////////
 __host__ __device__ float PDFSpecular(glm::vec3, glm::vec3, glm::vec3, float);
+__host__ __device__ float PDFDiffuse(glm::vec3 normal, glm::vec3 direction);
 
 struct Fresnel {
   float reflectionCoefficient;
@@ -148,7 +149,7 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 
 //materialType  0 = diffuse
 __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 toLight, glm::vec3 normal, glm::vec3 lightColor, material mat){
-  //First randomly decide material type from material
+  //First decide material type
 	if(mat.type == 0)
 	{
 		float cos = max(glm::dot(toLight, normal),0.0);
