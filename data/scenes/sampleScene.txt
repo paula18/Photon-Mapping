@@ -126,13 +126,13 @@ REFRIOR     0
 SCATTER     0        
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
-EMITTANCE   1
+EMITTANCE   1.5
 
 CAMERA
 RES         800 800
 FOVY        25
-ITERATIONS  5000
-FILE        test.bmp
+ITERATIONS  1000
+FILE        shinyFloor.bmp
 frame 0
 EYE         0 4.5 12
 VIEW        0 0 -1
@@ -142,7 +142,7 @@ APERATURE   1500
 
 OBJECT 0
 cube
-material 0
+material 6
 frame 0
 TRANS       0 0 0
 ROTAT       0 0 90
@@ -184,9 +184,9 @@ OBJECT 5
 sphere
 material 6
 frame 0
-TRANS       0 4 -1
-ROTAT       0 180 0
-SCALE       4 4 4
+TRANS       0 2 -2
+ROTAT       0 180 45
+SCALE       3.5 3.5 3.5
 
 
 OBJECT 6
@@ -195,12 +195,12 @@ material 9
 frame 0
 TRANS       0 8.5 0
 ROTAT       0 0 90
-SCALE       .5 .5 .5
+SCALE       1.5 1.5 1.5
 
 //OBJECT 7
-//cube
-//material 9 
+//sphere
+//material 6
 //frame 0
-//TRANS       0 4.5 12
-//ROTAT       0 0 0
-//SCALE       4 4 .3
+//TRANS       0 7.5 0
+//ROTAT       45 180 45
+//SCALE       1 1 1

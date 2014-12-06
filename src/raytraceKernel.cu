@@ -456,7 +456,8 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           
           // balance heuristic to update incolor
           float denom = solidAngle + pdfWeight;
-          inColor     = (solidAngle/denom) * directLight + (pdfWeight/denom) * BSDFcolor;
+          //inColor     = (solidAngle/denom) * directLight + (pdfWeight/denom) * BSDFcolor;
+          inColor     = directLight + BSDFcolor;
         }
       }
     }
