@@ -463,8 +463,8 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     if(validRay == 1){
       //Update Pixel Color
       float weight = imageWeights[index];
-      float denom  = weight + 1.0f;//totalPDFWeight;
-      colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
+      float denom  = weight + totalPDFWeight;
+      colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
       imageWeights[index] = denom;
     }
   }

@@ -160,6 +160,9 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 	{
 		float specPDF = PDFSpecular(inDirection, toLight, normal, 100);
 		glm::vec3 color = lightColor * mat.specularColor * specPDF;
+		// add diffuse component (screws up direct lighting)
+		//float cos = max(glm::dot(toLight, normal),0.0);
+		//color += lightColor * cos * mat.color;
 		return color;
 	}
 	return lightColor;//should be unreachable.  
