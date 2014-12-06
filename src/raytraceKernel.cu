@@ -281,6 +281,7 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
     
     if(distToIntersect == FLT_MAX){//miss
       v.isValid = 0;
+      eyePaths[index].vert[currDepth] = v; //update invalid vertex!
       rayList[index].isValid = 0;
       return;
     }else if(mat.type == 9){  //is this a light source?
