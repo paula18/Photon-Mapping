@@ -210,10 +210,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
   
-  if(m.type == 1){
-    solidAngle = 0;
-    return glm::vec3(1);
-  }
+  
   
   //Get random point on light
   glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 
@@ -289,11 +286,12 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
       rayList[index].isValid = 0;
       return;
     }else if(mat.type == 9){  //is this a light source?
-      solidAngle = 0.0;//noDirectLight
+      solidAngle = TWO_PI;//noDirectLight
       directLight = (mat.color * mat.emittance);
       COLOR = COLOR * directLight;
       v.hitLight = 1;
       v.isValid = 1;
+      rayList[index].isValid = 0;
     }else{
 	  solidAngle = 0.0;
       directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle); //updates solidAngle as side effect
@@ -429,26 +427,32 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     glm::vec3 directLight;
     
     int validRay = 0;
-    
+    float totalPDFWeight = 1.0f;
+    vertex v;
     int max = traceDepth - 1;
     for(int vert = max ; vert >= 0; vert--){
-      if(eyePaths[index].vert[vert].isValid == 1){
+      v = eyePaths[index].vert[vert];
+      if(v.isValid == 1){
         validRay = 1;
-        material mat = eyePaths[index].vert[vert].mat;
-        if(eyePaths[index].vert[vert].hitLight == 1){
+        material mat = v.mat;
+        if(v.hitLight == 1){
           //This vertex is on a light
           inColor = mat.color * mat.emittance;
         }else{
+          totalPDFWeight *= v.pdfWeight;
           //update BSDF color
-          inDirection  = eyePaths[index].vert[vert].inDirection;
-          outDirection = eyePaths[index].vert[vert].outDirection;
-          normal       = eyePaths[index].vert[vert].normal;
-          pdfWeight    = eyePaths[index].vert[vert].pdfWeight;
+          inDirection  = v.inDirection;
+          outDirection = v.outDirection;
+          normal       = v.normal;
+          pdfWeight    = v.pdfWeight;
           BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
           
           //update incoming color
-          solidAngle  = eyePaths[index].vert[vert].solidAngle;
-          directLight = eyePaths[index].vert[vert].directLight;
+          solidAngle  = v.solidAngle;
+          directLight = v.directLight;
+          
+          //pdfWeight  *= pdfWeight;
+          //solidAngle *= solidAngle;
           
           // balance heuristic to update incolor
           float denom = solidAngle + pdfWeight;
@@ -459,7 +463,7 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     if(validRay == 1){
       //Update Pixel Color
       float weight = imageWeights[index];
-      float denom  = weight + 1.0f;
+      float denom  = weight + 1.0f;//totalPDFWeight;
       colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
       imageWeights[index] = denom;
     }

@@ -6,7 +6,13 @@
 #ifndef INTERACTIONS_H
 #define INTERACTIONS_H
 
+
 #include "intersections.h"
+
+/////////////////////////////////
+// Forward Declarations
+/////////////////////////////////
+__host__ __device__ float PDFSpecular(glm::vec3, glm::vec3, glm::vec3, float);
 
 struct Fresnel {
   float reflectionCoefficient;
@@ -143,6 +149,7 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 	}
 	else if (mat.type == 1)
 	{
+		float specPDF = PDFSpecular(inDirection, toLight, normal, 20.0);
 		glm::vec3 color = lightColor * mat.specularColor;
 		return color;
 	}
@@ -237,7 +244,7 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 {
 	glm::vec3 R = glm::reflect(viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
-	return max(0.0, pow(d, shininess))*(shininess+1)*min(1.0, sin(acos(d)))/TWO_PI;
+	return max(0.0, pow(d, shininess))*(shininess+1)*max(0.0f,min(1.0, sin(acos(d))))/TWO_PI;
 	///return max(0.0, pow(d, shininess))*(shininess+1)/TWO_PI;
 	//return 1;
 }
