@@ -684,7 +684,7 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 						}
 					  }
 					}
-					if(validRay == 1){
+					if(validRay == 1 && totalPDFWeight > 0){
 /*
 						//Update Pixel Color
 						float weight = imageWeights[index];
@@ -713,14 +713,15 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 		}
     }
     //MIS HEURISTIC WITH DIRECT LIGHT!
-	v = eyePaths[index].vert[0];
+	v = eyePaths[index].vert[0];//direct light first bounce
+	//power heuristic
+	pdfWeight  = sumPDF/numPDFs;
 	if(v.isValid == 1){
-		//power heuristic
-		 pdfWeight  = sumPDF/numPDFs;
+
 		 solidAngle = v.solidAngle;
 
-		 pdfWeight *= pdfWeight;
-		 solidAngle *= solidAngle;
+		 //pdfWeight *= pdfWeight;
+		 //solidAngle *= solidAngle;
 
 		 float denom = pdfWeight + solidAngle;
 		 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
@@ -729,10 +730,10 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 
 		 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
 		 imageWeights[index] = denom;
-	}else{
+	}else if (pdfWeight > 0.0f){
 		float weight = imageWeights[index];
-		float denom  = weight + pdfWeight;
-		colors[index] = colors[index] * (weight/denom) + pdfWeight * (1.0f/denom);
+		float denom  = weight + 1.0f;
+		colors[index] = colors[index] * (weight/denom) + averageBSDF * (1.0f/denom);
 		imageWeights[index] = denom;
 	}
   }
