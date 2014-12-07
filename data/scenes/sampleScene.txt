@@ -182,7 +182,7 @@ SCALE       .01 10 10
 
 OBJECT 5
 sphere
-material 6
+material 0
 frame 0
 TRANS       0 2 -2
 ROTAT       45 180 45
