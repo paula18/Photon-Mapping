@@ -130,7 +130,7 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 nor
 
 
 __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, glm::vec3 center) {
-/*
+
 	float alpha = xi2 * TWO_PI; 
 	float phi = glm::acos(2 * xi1 - 1);
 	float x = center.x + (sin(phi) * cos(alpha));
@@ -138,13 +138,13 @@ __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2, g
 	float z = center.z + (cos(phi));
 
 	return glm::normalize(glm::vec3(x, y, z));
-*/
-	float theta = 2.0f * PI * xi1;
+
+/*	float theta = 2.0f * PI * xi1;
 	float phi = acos(2.0f * xi2 - 1);
 	float radius = 1.0f;
 	glm::vec3 localPosition = glm::vec3( radius * sin(theta) * cos(phi), radius * sin(theta) * sin(phi), radius * cos(phi));
 
-	return localPosition + center;
+	return localPosition + center;*/
 }
 
 
