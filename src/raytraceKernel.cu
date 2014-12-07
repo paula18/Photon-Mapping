@@ -234,13 +234,13 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //TODO: Update to support multiple light sources
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
-
+/*
   if(m.type == 1){
 	  solidAngle = 0.0f;
 	  return glm::vec3(0);
 
   }
-
+*/
   
   //Get random point on light
   glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 

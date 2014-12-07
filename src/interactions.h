@@ -9,6 +9,7 @@
 
 #include "intersections.h"
 
+
 /////////////////////////////////
 // Forward Declarations
 /////////////////////////////////
@@ -253,7 +254,7 @@ __host__ __device__ int calculateReflectiveDirection(ray& thisRay, glm::vec3 int
 	 //Perfect reflective
     newRay.direction = glm::reflect(thisRay.direction, normal);
     newRay.direction = glm::normalize(newRay.direction);
-	//newRay.direction = localToWorld(generateDir(seed1, seed2, shininess), newRay.direction);
+	newRay.direction = localToWorld(generateDir(seed1, seed2, shininess), newRay.direction);
     newRay.origin = intersect + .001f * newRay.direction;//nudge in direction
 	//Update COLOR
 	color = color * mat.specularColor; 
@@ -267,8 +268,8 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 	glm::vec3 R = glm::reflect(viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
 	//return max(0.0, pow(d, shininess))*(shininess+1)*max(0.0f,min(1.0, sin(acos(d))))/TWO_PI;
-	//return glm::clamp( (float)(max(0.0f, pow(d, shininess))*(shininess+1.0f)/TWO_PI), 0.0f, 1.0f);
-	return 1;
+	return glm::clamp( (float)(max(0.0f, pow(d, shininess))*(shininess+1.0f)/TWO_PI), 0.0f, 1.0f);
+	//return 1;
 }
 
 __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
