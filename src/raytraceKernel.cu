@@ -142,24 +142,32 @@ __global__ void initializeRay(glm::vec2 resolution, float time, cameraData cam, 
 }
 
 __global__ void initializeLightPaths(float time, cameraData cam, rayState* lightrayList, int numLightpaths, staticGeom* lights, int numLights, Path* lightPaths, material* materialList){
+	/*
 	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 	int index = x + (y * cam.resolution.x);
 
 	if((x<=cam.resolution.x && y<=cam.resolution.y))
+	*/
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if((index <= numLightpaths))
 	{
 		//generate random numbers
 		thrust::default_random_engine rng(hash(index * time));
 		thrust::uniform_real_distribution<float> u01(-1,1);
-		float random  = (float) u01(rng);
-		float random2 = (float) u01(rng);
+		thrust::uniform_real_distribution<float> u02(0,1);
+		float random  = (float) u02(rng) * 2.0 - 1.0;
+		float random2 = (float) u02(rng) * 2.0 - 1.0;
 
 		//randomly select light
 		staticGeom light = lights[0];
 
+
 		ray thisRay;
 		glm::vec3 normal = getRandomDirectionInSphere(random, random2, glm::vec3(0,0,0)); // random point on unit sphere
 		thisRay.origin = multiplyMV(light.transform, glm::vec4(normal,1.0f));
+		random  = (float) u02(rng);
+		random2 = (float) u02(rng);
 		thisRay.direction = calculateRandomDirectionInHemisphere(normal, random, random2);
 
 		//lightrayList[index].color = glm::vec3(3.0);
@@ -583,7 +591,8 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
 __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths, float time, staticGeom* geoms,
 	int numberOfGeoms, material* materials, Path* lightPaths) {
   // index into array is based off pixel position
-  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
   //integrate light contribution Back to Front.
@@ -594,7 +603,7 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
     ray thisRay;
     glm::vec3 BSDFcolor = glm::vec3(0);
     glm::vec3 inColor;
-    //float solidAngle;
+    float solidAngle;
     float pdfWeight;
     glm::vec3 directLight;
     int validRay = 0;
@@ -606,74 +615,91 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
     // - Incoming Light (flux retained from light)
     // - PDFWeight (accumulated)
     // - position of final vertex
-    vertex lv = lightPaths[9].vert[0];
-    glm::vec3 lightColor = lv.mat.color * lv.mat.emittance;
-    float lightPDF = 1.0f;
-    for(int li = 1; li <= traceDepth; li ++){
-    	//connect light vertex to each eye vertex
-		for( int max = traceDepth - 1; max >=0; max--){
-			totalPDFWeight = lightPDF;
-			inColor = lightColor;
-			validRay = 0;
-			v = eyePaths[index].vert[max];
-			//check if can connect.  if no break
-			 if(v.isValid == 1){
-			//intersection checks:
-				float dist = glm::distance(lv.position, v.position);
-				float distToIntersect = dist;
-				thisRay.direction = glm::normalize(lv.position - v.position);
-				thisRay.origin = lv.position;
+    for(int LP = 0; LP <= 4; LP++){
+		//int LP = 2;
+    	vertex lv = lightPaths[LP].vert[0];
+		glm::vec3 lightColor = lv.mat.color * lv.mat.emittance;
+		float lightPDF = 1.0f;
+		for(int li = 1; li <= traceDepth; li ++){
+			//connect light vertex to each eye vertex
+			for( int max = traceDepth - 1; max >=0; max--){
+				totalPDFWeight = lightPDF;
+				inColor = lightColor;
+				validRay = 0;
+				v = eyePaths[index].vert[max];
+				//check if can connect.  if no break
+				 if(v.isValid == 1){
+				//intersection checks:
+					float dist = glm::distance(lv.position, v.position);
+					float distToIntersect = dist;
+					thisRay.direction = glm::normalize(lv.position - v.position);
+					thisRay.origin = v.position;
 
-				int materialID = 0;                        //updated in intersectionTest
-				glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
-				distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
-				if(distToIntersect < dist){//hit something
-					material m = materials[materialID];
-					if(m.type != 9){
-						continue;
+					int materialID = 0;                        //updated in intersectionTest
+					glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+					distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
+					if(distToIntersect < dist){//hit something
+						material m = materials[materialID];
+						if(m.type != 9){
+							continue;
+						}
 					}
-				}
-				//update inColor
-				inColor = getColorFromBSDF(v.inDirection, thisRay.direction , v.normal, inColor, v.mat);
-				//update Probability
-				pdfWeight = PDF(v.inDirection, thisRay.direction, v.normal, mat);
-				totalPDFWeight *= pdfWeight;
-				for(int vert = max - 1 ; vert >= 0; vert--){
-				  v = eyePaths[index].vert[vert];
-				  if(v.isValid == 1){
-					validRay = 1;
-					material mat = v.mat;
-					if(v.hitLight == 1){
-						inColor = mat.color * mat.emittance;
-						totalPDFWeight = 1.0f;//*= PDF(v.inDirection, v.outDirection, v.normal, v.mat);
-					}else{
-					  totalPDFWeight *= v.pdfWeight;
-					  //update BSDF color
-					  //BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
-					  //inColor     = v.directLight + BSDFcolor;
-					  inColor      = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+					//update inColor
+					inColor = getColorFromBSDF(v.inDirection, thisRay.direction , v.normal, inColor, v.mat);
+					//update Probability
+					pdfWeight = PDF(v.inDirection, thisRay.direction, v.normal, mat);
+					totalPDFWeight *= pdfWeight;
+					for(int vert = max - 1 ; vert >= 0; vert--){
+					  v = eyePaths[index].vert[vert];
+					  if(v.isValid == 1){
+						validRay = 1;
+						material mat = v.mat;
+						if(v.hitLight == 1){
+							inColor = mat.color * mat.emittance;
+							totalPDFWeight = 1.0f;//*= PDF(v.inDirection, v.outDirection, v.normal, v.mat);
+						}else{
+						  totalPDFWeight *= v.pdfWeight;
+						  //update BSDF color
+						  //BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+						  //inColor     = v.directLight + BSDFcolor;
+
+						   BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
+
+
+
+						   //power heuristic
+						   pdfWeight  = v.pdfWeight * v.pdfWeight;
+						   solidAngle = v.solidAngle * v.solidAngle;
+
+						   // balance heuristic to update incolor
+						   float denom = solidAngle + pdfWeight;
+						   inColor     = (solidAngle/denom) * v.directLight + (pdfWeight/denom) * BSDFcolor;
+						   //inColor     = directLight + BSDFcolor;
+
+						  //inColor      = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+
+						}
+					  }
+					}
+					if(validRay == 1){
+						//Update Pixel Color
+						float weight = imageWeights[index];
+						float denom  = weight + totalPDFWeight;
+						colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
+						imageWeights[index] = denom;
 
 					}
-				  }
+				 }
 				}
-				if(validRay == 1){
-					//Update Pixel Color
-					float weight = imageWeights[index];
-					float denom  = weight + totalPDFWeight;
-					colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
-					imageWeights[index] = denom;
-
+			// Update light vertex
+			if(li < traceDepth){
+				lv = lightPaths[LP].vert[li];
+				if(lv.isValid == 0){
+					return; //unless we want to do the second pass on eye paths below
 				}
-			 }
+				lightColor = getColorFromBSDF(lv.inDirection, lv.outDirection, lv.normal, lightColor, lv.mat);
+				lightPDF *= lv.pdfWeight;
 			}
-		// Update light vertex
-		if(li < traceDepth){
-			lv = lightPaths[9].vert[li];
-			if(lv.isValid == 0){
-				return; //unless we want to do the second pass on eye paths below
-			}
-			lightColor = getColorFromBSDF(lv.inDirection, lv.outDirection, lv.normal, lightColor, lv.mat);
-			lightPDF *= lv.pdfWeight;
 		}
     }
     /*
@@ -751,8 +777,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   // allocate Light paths
 	Path* lightPaths = NULL;
-	cudaMalloc((void**)&lightPaths,         (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
-  
+	//cudaMalloc((void**)&lightPaths,         (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path));
+	cudaMalloc((void**)&lightPaths,         10 * sizeof(Path));
+
   // Allocate per-pixel accumulated weight (probabilites of valid light paths)
   float* imageWeights = NULL;
   cudaMalloc((void**)&imageWeights,                  (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(float));
@@ -817,17 +844,17 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   //allocate light rays 
   rayState* lightrayList = NULL;
-  cudaMalloc((void**)&lightrayList, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(rayState));
-
+  //cudaMalloc((void**)&lightrayList, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(rayState));
+  cudaMalloc((void**)&lightrayList, 10 * sizeof(rayState));
   
  // kernel launches
   //Get initial rays
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
 
   //Initialize light subpaths
-  int numLightpaths = (int)renderCam->resolution.x * (int)renderCam->resolution.y;
+  int numLightpaths = 10;
 
-  initializeLightPaths<<<fullBlocksPerGrid, threadsPerBlock>>>((float)iterations, cam, lightrayList, numLightpaths,  cudalights, numberOfLights, lightPaths,  materialList);
+  initializeLightPaths<<<1, numLightpaths>>>((float)iterations, cam, lightrayList, numLightpaths,  cudalights, numberOfLights, lightPaths,  materialList);
   
 
   //build eye path
@@ -840,7 +867,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //build light path
     for(int i = 1; i < traceDepth; i++){
       //do one step
-      buildLightPath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths, cudalights, numberOfLights);
+      buildLightPath<<<1, numLightpaths>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths, cudalights, numberOfLights);
     }
 /*
    //buildLightPath
