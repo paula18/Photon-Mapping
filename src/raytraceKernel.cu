@@ -199,9 +199,9 @@ __host__ __device__ float getSolidAngle(staticGeom light, glm::vec3 position, gl
 	float dist = glm::length(direction); 
 	float angle = glm::atan(radius/dist);
 	float solid = TWO_PI * (1.0f - glm::cos(angle));
-	//return solid / TWO_PI;
+	return solid *(1.0/PI);
 	//Convert to PDFWeight
-	return solid * (dist * dist) / abs(glm::dot(normal,direction))/TWO_PI;
+	//return solid * (dist * dist) / abs(glm::dot(normal,direction))/TWO_PI;
 }
 
 __host__ __device__ float convertSolidAngle(float value, float dist, float cos){
@@ -666,7 +666,8 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 						  totalPDFWeight *= v.pdfWeight;
 						  //update BSDF color
 						  BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
-						  inColor     = v.directLight + BSDFcolor;
+						  //inColor     = v.directLight + BSDFcolor;
+						  inColor = BSDFcolor;
 						  /*
 						   BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
 
@@ -724,16 +725,18 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 
 		 solidAngle = v.solidAngle;
 
-		 //pdfWeight *= pdfWeight;
-		 //solidAngle *= solidAngle;
+		 pdfWeight *= pdfWeight;
+		 solidAngle *= solidAngle;
 
 		 float denom = pdfWeight + solidAngle;
 		 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
 		 float weight = imageWeights[index];
-		 denom  = weight + pdfWeight;
+		 denom  = weight + 1.0f;
 
-		 colors[index] = colors[index] * (weight/denom) + inColor * (pdfWeight/denom);
+		 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
 		 imageWeights[index] = denom;
+
+		//colors[index] = glm::vec3(solidAngle);
 	}else if (pdfWeight > 0.0f){
 		float weight = imageWeights[index];
 		float denom  = weight + 1.0f;
@@ -872,9 +875,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
 /*
   // error checking
-  Path* localPaths = new Path[1000];
-  cudaMemcpy( localPaths, eyePaths, 1000 * sizeof(Path), cudaMemcpyDeviceToHost);
-  for(int i = 0; i < 1000; i++){
+  Path* localPaths = new Path[(int)renderCam->resolution.x * (int)renderCam->resolution.y];
+  cudaMemcpy( localPaths, eyePaths, (int)renderCam->resolution.x * (int)renderCam->resolution.y * sizeof(Path), cudaMemcpyDeviceToHost);
+  for(int i = 0; i < (int)renderCam->resolution.x * (int)renderCam->resolution.y; i++){
 	  vertex v = localPaths[i].vert[1];
 	  if(v.isValid == 1){
 		  if(v.solidAngle < 0.0 || v.solidAngle > 1.0){
@@ -923,7 +926,8 @@ if(renderType == 0){//classic PathTracer
   cudaMemcpy( renderCam->image,        cudaimage,    (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
   //retrieve weights from GPU
   cudaMemcpy( renderCam->imageWeights, imageWeights, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(float), cudaMemcpyDeviceToHost);
-
+/*
+  //debug
   for(int i = 0; i < (int)renderCam->resolution.x * (int)renderCam->resolution.y; i++){
 	  float weight = renderCam->imageWeights[i];
 	  if(weight == 0.0 || weight == 1.0){
@@ -931,7 +935,7 @@ if(renderType == 0){//classic PathTracer
 	  }
   }
   exit(0);
-
+*/
 
   // free up stuff, or else we'll leak memory like a madman
   cudaFree( cudaimage );
