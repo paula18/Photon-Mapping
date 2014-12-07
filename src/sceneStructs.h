@@ -84,6 +84,7 @@ struct rayState{
   int isValid;
   glm::vec3 color;
   int photoIDX;
+  int matIDX;
 };
 
 //new structs for Bidirectional Path Tracer

@@ -132,7 +132,7 @@ CAMERA
 RES         800 800
 FOVY        25
 ITERATIONS  1000
-FILE        shinyFloor.bmp
+FILE        tooWideReflection.bmp
 frame 0
 EYE         0 4.5 12
 VIEW        0 0 -1
@@ -185,7 +185,7 @@ sphere
 material 6
 frame 0
 TRANS       0 2 -2
-ROTAT       0 180 45
+ROTAT       45 180 45
 SCALE       3.5 3.5 3.5
 
 
@@ -195,7 +195,7 @@ material 9
 frame 0
 TRANS       0 8.5 0
 ROTAT       0 0 90
-SCALE       1.5 1.5 1.5
+SCALE       .5 .5 .5
 
 //OBJECT 7
 //sphere

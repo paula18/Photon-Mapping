@@ -141,23 +141,39 @@ __global__ void initializeRay(glm::vec2 resolution, float time, cameraData cam, 
   }
 }
 
-__global__ void initializeLightPaths(float time, cameraData cam, rayState* lightrayList, int numLightpaths){
+__global__ void initializeLightPaths(float time, cameraData cam, rayState* lightrayList, int numLightpaths, staticGeom* lights, int numLights, Path* lightPaths, material* materialList){
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
 	if((index <= numLightpaths))
 	{
-		ray thisRay;
-		//HARDCODED AS A POINT LIGHT 
-		lightrayList[index].RAY.origin = glm::vec3(0, 9, 0); 
-
+		//generate random numbers
 		thrust::default_random_engine rng(hash(index * time));
 		thrust::uniform_real_distribution<float> u01(-1,1);
 		float random  = (float) u01(rng);
 		float random2 = (float) u01(rng);
 
-		lightrayList[index].RAY.direction = getRandomDirectionInSphere(random, random2, lightrayList[index].RAY.origin); 
-		lightrayList[index].isValid = true;
-		lightrayList[index].color = glm::vec3(3.0);
+		//randomly select light
+		staticGeom light = lights[0];
+
+		ray thisRay;
+		glm::vec3 normal = getRandomDirectionInSphere(random, random2, glm::vec3(0,0,0)); // random point on unit sphere
+		thisRay.origin = multiplyMV(light.transform, glm::vec4(normal,1.0f));
+		thisRay.direction = calculateRandomDirectionInHemisphere(normal, random, random2);
+
+		//lightrayList[index].color = glm::vec3(3.0);
+		lightrayList[index].RAY = thisRay;
+		lightrayList[index].isValid = 1;
+
+		//initialize light Path
+		vertex v;
+		v.isValid = 1;//This is the light!
+		v.hitLight = 1;
+		v.mat = materialList[light.materialid];
+		v.outDirection = glm::vec3(0);
+		v.inDirection = - thisRay.direction;
+		v.pdfWeight = 1.0f;
+		lightPaths[index].vert[0] = v;
+
 	}
 }
 
@@ -208,7 +224,11 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   //TODO: Update to support multiple light sources
   //  - Currently assumes all lights are spheres
   ////////////////////////////////////////////////
-  
+  if(m.type == 1){
+	  solidAngle = 0.0f;
+	  return glm::vec3(0);
+
+  }
   
   //Get random point on light
   glm::vec3 lightPOS = getLightPos(lights, rnd1, rnd2); 
@@ -295,6 +315,8 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
 	  solidAngle = 0.0;
       directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle); //updates solidAngle as side effect
     }
+
+
     //save intersection point to eyePath
     v.position = intersectPoint;
     
@@ -326,6 +348,91 @@ __global__ void buildEyePath(glm::vec2 resolution, float time, cameraData cam, i
   }
 }
 
+//Build Light Path
+__global__ void buildLightPath(glm::vec2 resolution, float time, cameraData cam, int maxDepth, glm::vec3* colors,
+                            staticGeom* geoms, int numberOfGeoms, material* materials, int numberOfMaterials,
+                            rayState* rayList, int currDepth, Path* lightPaths, staticGeom* lights, int numberOfLights){
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  if((x<=resolution.x && y<=resolution.y)){
+    rayState rs = rayList[index];
+    if(rs.isValid == 0){
+      lightPaths[index].vert[currDepth].isValid = 0;
+      return;
+    }
+    //clear vertices
+    vertex v;
+    v.isValid  = 1;
+    v.hitLight = 0;
+
+
+    //random number generator
+    thrust::default_random_engine rng(hash(index * (time + currDepth)));
+    thrust::uniform_real_distribution<float> u01(0,1);
+
+    //get variables
+    ray thisRay     = rs.RAY;
+    glm::vec3 COLOR = rs.color;
+    v.outDirection =  - thisRay.direction; //in light paths we're going backward
+
+    //intersection checks:
+    float distToIntersect = FLT_MAX;
+    int materialID = 0;                        //updated in intersectionTest
+    glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+    distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
+    material mat = materials[materialID];
+
+    float solidAngle;
+    glm::vec3 directLight;
+
+    if(distToIntersect == FLT_MAX){//miss
+      v.isValid = 0;
+      lightPaths[index].vert[currDepth] = v; //update invalid vertex!
+      rayList[index].isValid = 0;
+      return;
+    }else if(mat.type == 9){  //is this a light source?
+      solidAngle = TWO_PI;//noDirectLight
+      directLight = (mat.color * mat.emittance);
+      COLOR = COLOR * directLight;
+      v.hitLight = 1;
+      v.isValid = 1;
+      rayList[index].isValid = 0; //I could probably let it continue...
+    }else{
+	  solidAngle = 0.0;
+      directLight = directLightContribution(mat, geoms, numberOfGeoms, lights, numberOfLights, materials, intersectNormal, thisRay.direction, intersectPoint, (float) u01(rng) ,(float) u01(rng), solidAngle); //updates solidAngle as side effect
+    }
+
+
+    //save intersection point to lightPath
+    v.position = intersectPoint;
+
+    //update variables
+    float pdfWeight = 0;
+    calculateBSDF(thisRay, intersectPoint, intersectNormal, COLOR, mat, (float) u01(rng) ,(float) u01(rng), pdfWeight, lights);
+
+    //update rayList
+    rs.RAY   = thisRay;
+    rs.color = COLOR;
+    rayList[index] = rs;
+
+    //save color to eyePath
+    v.colorAcc = COLOR; //Saves color at each vertex although i think we only need the last one???
+    v.normal = intersectNormal;
+    v.inDirection = - thisRay.direction; // we're tracing backward
+    v.mat = mat;
+
+    //update PathProbability
+    //start at depth 1 not 0;
+    v.pathProbability = lightPaths[index].vert[currDepth - 1].pathProbability * pdfWeight; //Update Path Weight
+
+    v.directLight = directLight;
+    v.solidAngle = solidAngle;//convertSolidAngle(solidAngle, distToIntersect, glm::dot(intersectNormal, thisRay.direction)) * solidAngle;
+    v.pdfWeight = pdfWeight;  //probability of this bounce only
+    lightPaths[index].vert[currDepth] = v;
+  }
+}
 
 
 __global__ void connectPaths(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, staticGeom* geoms, int numberOfGeoms, int traceDepth, Path* eyePaths, Path* lightPaths){
@@ -471,6 +578,110 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
   }
 }
 
+__global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float* imageWeights, int traceDepth, Path* eyePaths, float time, staticGeom* geoms,
+	int numberOfGeoms, material* materials, Path* lightPaths) {
+  // index into array is based off pixel position
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+  int index = x + (y * resolution.x);
+  //integrate light contribution Back to Front.
+  if(x<=resolution.x && y<=resolution.y){
+	glm::vec3 inDirection;
+    glm::vec3 outDirection;
+    glm::vec3 normal;
+    ray thisRay;
+    glm::vec3 BSDFcolor = glm::vec3(0);
+    glm::vec3 inColor;
+    //float solidAngle;
+    float pdfWeight;
+    glm::vec3 directLight;
+    int validRay = 0;
+    float totalPDFWeight = 1.0f;
+    material mat;
+    vertex v;
+
+    //for each potential light path calculate
+    // - Incoming Light (flux retained from light)
+    // - PDFWeight (accumulated)
+    // - position of final vertex
+    vertex lv = lightPaths[0].vert[0];
+    glm::vec3 lightColor = lv.mat.color * lv.mat.emittance;
+    for(int li = 1; li < traceDepth; li ++){
+    	continue;
+    }
+    for( int max = traceDepth - 1; max >+0; max--){
+		inColor = lightColor;
+    	validRay = 0;
+    	v = eyePaths[index].vert[max];
+    	//check if can connect.  if no break
+    	 if(v.isValid == 1){
+    	//intersection checks:
+			float dist = glm::distance(lv.position, v.position);
+			float distToIntersect = dist;
+			thisRay.direction = lv.position - v.position;
+			thisRay.origin = v.position;
+
+			int materialID = 0;                        //updated in intersectionTest
+			glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+			distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
+			if(distToIntersect < dist){//hit something
+				material m = materials[materialID];
+				if(m.type != 9){
+					continue;
+				}
+			}
+			//update inColor
+			inColor = getColorFromBSDF(v.inDirection, thisRay.direction, v.normal, inColor, v.mat);
+			//update Probability
+			pdfWeight = PDF(v.inDirection, thisRay.direction, v.normal, mat);
+			totalPDFWeight *= pdfWeight;
+			for(int vert = max - 1 ; vert >= 0; vert--){
+			  v = eyePaths[index].vert[vert];
+			  if(v.isValid == 1){
+				validRay = 1;
+				material mat = v.mat;
+				if(v.hitLight == 1){
+				  //This vertex is on a light
+				  //inColor += mat.color * mat.emittance;
+				  //totalPDFWeight *= PDF(v.inDirection, v.outDirection, v.normal, v.mat);
+				  continue;
+				}else{
+				  totalPDFWeight *= v.pdfWeight;
+				  //update BSDF color
+				  inDirection  = v.inDirection;
+				  outDirection = v.outDirection;
+				  normal       = v.normal;
+				  pdfWeight    = v.pdfWeight;
+				  //BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
+				  inColor      = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
+
+				  //update incoming color
+				  //solidAngle  = v.solidAngle;
+				  //directLight = v.directLight;
+
+				  //power heuristic
+				  //pdfWeight  *= pdfWeight;
+				  //solidAngle *= solidAngle;
+
+				  // balance heuristic to update incolor
+				  //float denom = solidAngle + pdfWeight;
+				  //inColor     = (solidAngle/denom) * directLight + (pdfWeight/denom) * BSDFcolor;
+				  //inColor     = directLight + BSDFcolor;
+				}
+			  }
+			}
+			if(validRay == 1){
+			  //Update Pixel Color
+			  float weight = imageWeights[index];
+			  float denom  = weight + totalPDFWeight;
+			  colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
+			  imageWeights[index] = denom;
+			}
+		 }
+    }
+  }
+}
+
 __global__ void compactRays(int* scanRays, rayState* rayList, int* validRays, int length){
   int index = (blockIdx.x * blockDim.x) + threadIdx.x;
   if(index >= length){
@@ -585,9 +796,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
 
   //Initialize light subpaths
-//  int numLightpaths = 10;
+  int numLightpaths = 10;
 
-//  initializeLightPaths<<<1, 10>>>((float)iterations, cam, lightrayList, numLightpaths);
+  initializeLightPaths<<<1, numLightpaths>>>((float)iterations, cam, lightrayList, numLightpaths,  cudalights, numberOfLights, lightPaths,  materialList);
   
 
   //build eye path
@@ -596,6 +807,12 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
     buildEyePath<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, rayList, i, eyePaths, cudalights, numberOfLights);
   }
 
+
+  //build light path
+    for(int i = 1; i < traceDepth; i++){
+      //do one step
+      buildEyePath<<<1, numLightpaths>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths, cudalights, numberOfLights);
+    }
 /*
    //buildLightPath
   for(int i = 0; i < traceDepth; i++){
@@ -613,8 +830,10 @@ if(renderType == 0){//classic PathTracer
   RenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
 }else if(renderType == 1){ //Direct Lighting Only
   RenderDirectLight<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths);
-}else{//Multiple Importance Sampling
+}else if(renderType == 2){//Multiple Importance Sampling
   MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList);
+}else{
+	BiDirRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList, lightPaths);
 }
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);

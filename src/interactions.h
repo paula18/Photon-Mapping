@@ -14,6 +14,7 @@
 /////////////////////////////////
 __host__ __device__ float PDFSpecular(glm::vec3, glm::vec3, glm::vec3, float);
 __host__ __device__ float PDFDiffuse(glm::vec3 normal, glm::vec3 direction);
+__host__ __device__ glm::vec3 randomPointOnLight(staticGeom light, float rnd1, float rnd2);
 
 struct Fresnel {
   float reflectionCoefficient;
@@ -170,11 +171,19 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 
 __host__ __device__ glm::vec3 getLightPos(staticGeom *lights, float rnd1, float rnd2)
 {
+	// choose light at random
+	staticGeom light = lights[0];
+	return randomPointOnLight(light, rnd1, rnd2);
+}
+
+__host__ __device__ glm::vec3 randomPointOnLight(staticGeom light, float rnd1, float rnd2)
+{
 
 	glm::vec3 lightPos = getRandomDirectionInSphere(rnd1, rnd2, glm::vec3(0,0,0)); // random point on unit sphere
-	lightPos = multiplyMV(lights[0].transform, glm::vec4(lightPos,1.0f));         // translate to point on light
+	lightPos = multiplyMV(light.transform, glm::vec4(lightPos,1.0f));         // translate to point on light
 	return lightPos;
 }
+
 ///////////////////////////////////////////////
 // BSDFs CALCULATIONS
 //////////////////////////////////////////////
@@ -243,7 +252,7 @@ __host__ __device__ int calculateReflectiveDirection(ray& thisRay, glm::vec3 int
 	 //Perfect reflective
     newRay.direction = glm::reflect(thisRay.direction, normal);
     newRay.direction = glm::normalize(newRay.direction);
-	newRay.direction = localToWorld(generateDir(seed1, seed2, shininess), newRay.direction); 
+	//newRay.direction = localToWorld(generateDir(seed1, seed2, shininess), newRay.direction);
     newRay.origin = intersect + .001f * newRay.direction;//nudge in direction
 	//Update COLOR
 	color = color * mat.specularColor; 
@@ -257,8 +266,8 @@ __host__ __device__ float PDFSpecular(glm::vec3 viewDir, glm::vec3 lightDir, glm
 	glm::vec3 R = glm::reflect(viewDir, normal); 
 	float d = glm::dot(R, lightDir); 
 	//return max(0.0, pow(d, shininess))*(shininess+1)*max(0.0f,min(1.0, sin(acos(d))))/TWO_PI;
-	return glm::clamp( (float)(max(0.0f, pow(d, shininess))*(shininess+1.0f)/TWO_PI), 0.0f, 1.0f);
-	//return 1;
+	//return glm::clamp( (float)(max(0.0f, pow(d, shininess))*(shininess+1.0f)/TWO_PI), 0.0f, 1.0f);
+	return 1;
 }
 
 __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect, glm::vec3 normal,
@@ -271,6 +280,15 @@ __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect
 	//glm::vec3 lightDir = lightPos - intersect; 
 	PDFWeight = PDFSpecular(orig.direction, thisRay.direction, normal, shininess);
 
+}
+
+__host__ __device__ float PDF(glm::vec3 viewDir, glm::vec3 lightDir, glm::vec3 normal, material mat){
+	if(mat.type == 0 || mat.type == 9){//diffuse
+		return PDFDiffuse(normal,viewDir);
+	}else if(mat.type == 1){
+		return PDFSpecular(viewDir, lightDir, normal, 20);
+	}
+	return 0.0f;
 }
 
 
