@@ -182,6 +182,7 @@ __global__ void initializeLightPaths(float time, cameraData cam, rayState* light
 		v.outDirection = glm::vec3(0);
 		v.inDirection = - thisRay.direction;
 		v.pdfWeight = 1.0f;
+		v.position = thisRay.origin;
 		lightPaths[index].vert[0] = v;
 
 	}
@@ -545,7 +546,7 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
     glm::vec3 directLight;
     
     int validRay = 0;
-    float totalPDFWeight = 1.0f;
+    float totalPDFWeight = 0.0f;
     vertex v;
     int max = traceDepth - 1;
     for(int vert = max ; vert >= 0; vert--){
@@ -556,6 +557,7 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
         if(v.hitLight == 1){
           //This vertex is on a light
           inColor = mat.color * mat.emittance;
+          totalPDFWeight = 1.0f;
         }else{
           totalPDFWeight *= v.pdfWeight;
           //update BSDF color
@@ -564,7 +566,8 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           normal       = v.normal;
           pdfWeight    = v.pdfWeight;
           BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
-          
+         inColor = BSDFcolor;
+          /*
           //update incoming color
           solidAngle  = v.solidAngle;
           directLight = v.directLight;
@@ -577,15 +580,34 @@ __global__ void MISRenderColor(glm::vec2 resolution, glm::vec3* colors, float* i
           float denom = solidAngle + pdfWeight;
           //inColor     = (solidAngle/denom) * directLight + (pdfWeight/denom) * BSDFcolor;
           inColor     = directLight + BSDFcolor;
+          */
         }
       }
     }
     if(validRay == 1){
       //Update Pixel Color
+    	/*
       float weight = imageWeights[index];
       float denom  = weight + totalPDFWeight;
       colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
       imageWeights[index] = denom;
+      */
+    	v = eyePaths[index].vert[0];
+    	pdfWeight = totalPDFWeight;
+    	 solidAngle = v.solidAngle;
+
+		 //pdfWeight *= pdfWeight;
+		 //solidAngle *= solidAngle;
+
+		 float denom = pdfWeight + solidAngle;
+		 inColor = inColor * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
+		 float weight = imageWeights[index];
+		 denom  = weight + 1.0f;
+		 //debug:
+		 //inColor = glm::vec3(pdfWeight);
+
+		 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
+		 imageWeights[index] = denom;
     }
   }
 }
@@ -732,11 +754,13 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 		 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
 		 float weight = imageWeights[index];
 		 denom  = weight + 1.0f;
+		 //debug:
+		 //inColor = glm::vec3(pdfWeight);
 
 		 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
 		 imageWeights[index] = denom;
 
-		//colors[index] = glm::vec3(solidAngle);
+
 	}else if (pdfWeight > 0.0f){
 		float weight = imageWeights[index];
 		float denom  = weight + 1.0f;

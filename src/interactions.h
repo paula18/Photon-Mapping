@@ -8,7 +8,7 @@
 
 
 #include "intersections.h"
-#define SHINE 10000
+
 
 /////////////////////////////////
 // Forward Declarations
@@ -161,12 +161,12 @@ __host__ __device__ glm::vec3 getColorFromBSDF(glm::vec3 inDirection, glm::vec3 
 	}
 	else if (mat.type == 1)
 	{
-		float specPDF = PDFSpecular(inDirection, toLight, normal, SHINE);
-		glm::vec3 color = lightColor * mat.specularColor * specPDF;
+		float specPDF = PDFSpecular(inDirection, toLight, normal, mat.specularExponent);
+		glm::vec3 Scolor = lightColor * mat.specularColor * specPDF;
 		// add diffuse component (screws up direct lighting)
-		//float cos = max(glm::dot(toLight, normal),0.0);
-		//color += lightColor * cos * mat.color;
-		return color;
+		float cos = max(glm::dot(toLight, normal),0.0);
+		glm::vec3 Dcolor = lightColor * cos * mat.color;
+		return Scolor + (1.0f - specPDF)*Dcolor;
 	}
 	return lightColor;//should be unreachable.  
 }
@@ -288,7 +288,7 @@ __host__ __device__ float PDF(glm::vec3 viewDir, glm::vec3 lightDir, glm::vec3 n
 	if(mat.type == 0){ //|| mat.type == 9){//diffuse or light
 		return PDFDiffuse(normal,lightDir);
 	}else if(mat.type == 1){
-		return PDFSpecular(viewDir, lightDir, normal, SHINE);
+		return PDFSpecular(viewDir, lightDir, normal, mat.specularExponent);
 	}
 	return 1.0f;
 }
@@ -347,7 +347,7 @@ __host__ __device__ int calculateBSDF(ray& thisRay, glm::vec3 intersect, glm::ve
 	//Perfect reflection
 	else if (mat.type == 1)
 	{
-		float shininess = SHINE;
+		float shininess = mat.specularExponent;
 		calculateSpecularBSDF(thisRay, intersect, normal, color, mat, seed1, seed2, lights, PDFWeight, shininess);
 		return materialType; 
 	}

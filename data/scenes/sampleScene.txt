@@ -39,9 +39,9 @@ EMITTANCE   0
 
 MATERIAL 3 				//red glossy
 TYPE	    1
-RGB         .63 .16 .04      
-SPECEX      0      
-SPECRGB     1 1 1       
+RGB         .63 .06 .04      
+SPECEX      3      
+SPECRGB     1 .8 .8       
 REFL        .1       
 REFR        .9       
 REFRIOR     2       
@@ -50,36 +50,36 @@ ABSCOEFF    0 0 0
 RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 4 				//grey diffuse
+MATERIAL 4 				//green glossy
 TYPE	    0
-RGB         .75 .75 .75     
-SPECEX      0      
-SPECRGB     1 1 1      
+RGB         .15 .48 .09      
+SPECEX      3      
+SPECRGB     .8 1 .8      
 REFL        0       
 REFR        0        
-REFRIOR     0      
+REFRIOR     0       
 SCATTER     0        
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 5 				//glass
-TYPE	    2
-RGB         0 0 0    
-SPECEX      0      
-SPECRGB     1 1 1      
-REFL        0       
-REFR        1        
-REFRIOR     2.2       
+MATERIAL 5 				//gray glossy
+TYPE	    1
+RGB         .75 .75 .75      
+SPECEX      5      
+SPECRGB     1 1 1     
+REFL        .1       
+REFR        0        
+REFRIOR     2.6       
 SCATTER     0        
-ABSCOEFF    .02 5.1 5.7      
-RSCTCOEFF   13
+ABSCOEFF    0 0 0      
+RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 6 				//gray glossy
+MATERIAL 6 				//gray nearMirror
 TYPE	    1
 RGB         .5 .5 .5      
-SPECEX      0      
+SPECEX      1000      
 SPECRGB     1 1 1     
 REFL        .1       
 REFR        0        
@@ -166,7 +166,7 @@ SCALE       .01 10 10
 
 OBJECT 3
 cube
-material 1
+material 3
 frame 0
 TRANS       -5 5 0
 ROTAT       0 0 0
@@ -174,7 +174,7 @@ SCALE       .01 10 10
 
 OBJECT 4
 cube
-material 2
+material 4
 frame 0
 TRANS       5 5 0
 ROTAT       0 0 0
@@ -195,12 +195,12 @@ material 9
 frame 0
 TRANS       0 8.5 0
 ROTAT       0 0 90
-SCALE       1.5 1.5 1.5
+SCALE       1 1 1
 
-//OBJECT 7
-//sphere
-//material 6
-//frame 0
-//TRANS       0 7.5 0
-//ROTAT       45 180 45
-//SCALE       1 1 1
+OBJECT 7
+cube
+material 6
+frame 0
+TRANS       0 5 0
+ROTAT       45 180 45
+SCALE       1 1 1
