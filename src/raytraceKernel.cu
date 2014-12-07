@@ -885,12 +885,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //Get initial rays
   initializeRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, rayList);
 
-  //Initialize light subpaths
-  int numLightpaths = 10;
-
-  initializeLightPaths<<<1, numLightpaths>>>((float)iterations, cam, lightrayList, numLightpaths,  cudalights, numberOfLights, lightPaths,  materialList);
-  
-
   //build eye path
   for(int i = 0; i < traceDepth; i++){
     //do one step
@@ -916,19 +910,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   exit(0);
 */
 
-  //build light path
-    for(int i = 1; i < traceDepth; i++){
-      //do one step
-      buildLightPath<<<1, numLightpaths>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths, cudalights, numberOfLights);
-    }
-/*
-   //buildLightPath
-  for(int i = 0; i < traceDepth; i++){
-    //do one step
-    buildEyePath<<<1, numLightpaths>>>(glm::vec2(10,1), (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths);
-  }
-*/
-
 
 /*  
   //connect paths and render to screen
@@ -941,7 +922,16 @@ if(renderType == 0){//classic PathTracer
 }else if(renderType == 2){//Multiple Importance Sampling
   MISRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList);
 }else{
-	BiDirRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList, lightPaths);
+	  //Initialize light subpaths
+	  int numLightpaths = 10;
+	  initializeLightPaths<<<1, numLightpaths>>>((float)iterations, cam, lightrayList, numLightpaths,  cudalights, numberOfLights, lightPaths,  materialList);
+	  //build light path
+	  for(int i = 1; i < traceDepth; i++){
+		  //do one step
+		  buildLightPath<<<1, numLightpaths>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialList, numberOfMaterials, lightrayList, i, lightPaths, cudalights, numberOfLights);
+	  }
+
+	  BiDirRenderColor<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, cudaimage, imageWeights, traceDepth, eyePaths, (float)iterations, cudageoms, numberOfGeoms, materialList, lightPaths);
 }
   //update visual
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
