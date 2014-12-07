@@ -131,8 +131,8 @@ EMITTANCE   1.5
 CAMERA
 RES         800 800
 FOVY        25
-ITERATIONS  6000
-FILE        tooWideReflection.bmp
+ITERATIONS  100
+FILE        BIDIR.bmp
 frame 0
 EYE         0 4.5 12
 VIEW        0 0 -1
@@ -195,7 +195,7 @@ material 9
 frame 0
 TRANS       0 8.5 0
 ROTAT       0 0 90
-SCALE       .5 .5 .5
+SCALE       1.5 1.5 1.5
 
 //OBJECT 7
 //sphere

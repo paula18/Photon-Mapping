@@ -600,6 +600,9 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 	glm::vec3 inDirection;
     glm::vec3 outDirection;
     glm::vec3 normal;
+    glm::vec3 averageBSDF;
+    float sumPDF = 0.0f;
+    float numPDFs = 0.0f;
     ray thisRay;
     glm::vec3 BSDFcolor = glm::vec3(0);
     glm::vec3 inColor;
@@ -663,7 +666,7 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 						  //BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
 						  //inColor     = v.directLight + BSDFcolor;
 
-						   BSDFcolor    = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
+						   BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
 
 
 
@@ -682,12 +685,18 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 					  }
 					}
 					if(validRay == 1){
+/*
 						//Update Pixel Color
 						float weight = imageWeights[index];
 						float denom  = weight + totalPDFWeight;
+						//float MISDenom = eyePaths[index].vert[0].pdfWeight + eyePaths[index].vert[0].solidAngle;
 						colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
 						imageWeights[index] = denom;
-
+*/
+						float weight = sumPDF;
+						float denom = sumPDF + totalPDFWeight;
+						averageBSDF = averageBSDF * (weight/denom) + inColor * (totalPDFWeight/denom);
+						sumPDF = denom;
 					}
 				 }
 				}
@@ -695,45 +704,30 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 			if(li < traceDepth){
 				lv = lightPaths[LP].vert[li];
 				if(lv.isValid == 0){
-					return; //unless we want to do the second pass on eye paths below
+					break; //unless we want to do the second pass on eye paths below
 				}
 				lightColor = getColorFromBSDF(lv.inDirection, lv.outDirection, lv.normal, lightColor, lv.mat);
 				lightPDF *= lv.pdfWeight;
 			}
 		}
     }
-    /*
-	validRay = 0;
-	totalPDFWeight = 1.0;
-    int max = traceDepth - 1;
-	for(int vert = max ; vert >= 0; vert--){
-	  v = eyePaths[index].vert[vert];
-	  if(v.isValid == 1){
+    //MIS HEURISTIC WITH DIRECT LIGHT!
+	v = eyePaths[index].vert[0];
 
-		material mat = v.mat;
-		if(v.hitLight == 1){
-			validRay = 1;
-		  //This vertex is on a light
-		  inColor = mat.color * mat.emittance;
-		}else{
-		  totalPDFWeight *= v.pdfWeight;
-		  //update BSDF color
-		  inDirection  = v.inDirection;
-		  outDirection = v.outDirection;
-		  normal       = v.normal;
-		  pdfWeight    = v.pdfWeight;
-		  inColor   = getColorFromBSDF(inDirection, outDirection, normal, inColor, mat);
-		}
-	  }
-	}
-	if(validRay == 1){
-	  //Update Pixel Color
-	  float weight = imageWeights[index];
-	  float denom  = weight + totalPDFWeight;
-	  colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
-	  imageWeights[index] = denom;
-	}
-*/
+	 //power heuristic
+	 pdfWeight  = sumPDF/numPDFs;
+	 solidAngle = v.solidAngle;
+
+	 float denom = pdfWeight + solidAngle;
+
+	 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
+	 //inColor = v.directLight * v.solidAngle;
+	 // balance heuristic to update incolor
+	 float weight = imageWeights[index];
+	 denom  = weight + 1.0f;
+
+	 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
+	 imageWeights[index] = denom;
   }
 }
 
