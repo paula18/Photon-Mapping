@@ -236,7 +236,7 @@ __host__ __device__ glm::vec3 directLightContribution(material m, staticGeom* ge
   ////////////////////////////////////////////////
   if(m.type == 1){
 	  solidAngle = 0.0f;
-	  return glm::vec3(0);
+	  return glm::vec3(1);
 
   }
   
@@ -697,6 +697,7 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 						float denom = sumPDF + totalPDFWeight;
 						averageBSDF = averageBSDF * (weight/denom) + inColor * (totalPDFWeight/denom);
 						sumPDF = denom;
+						numPDFs += 1.0f;
 					}
 				 }
 				}
@@ -713,21 +714,27 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
     }
     //MIS HEURISTIC WITH DIRECT LIGHT!
 	v = eyePaths[index].vert[0];
+	if(v.isValid == 1){
+		//power heuristic
+		 pdfWeight  = sumPDF/numPDFs;
+		 solidAngle = v.solidAngle;
 
-	 //power heuristic
-	 pdfWeight  = sumPDF/numPDFs;
-	 solidAngle = v.solidAngle;
+		 pdfWeight *= pdfWeight;
+		 solidAngle *= solidAngle;
 
-	 float denom = pdfWeight + solidAngle;
+		 float denom = pdfWeight + solidAngle;
+		 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
+		 float weight = imageWeights[index];
+		 denom  = weight + 1.0f;
 
-	 inColor = averageBSDF * (pdfWeight/denom) + v.directLight * (solidAngle/denom);
-	 //inColor = v.directLight * v.solidAngle;
-	 // balance heuristic to update incolor
-	 float weight = imageWeights[index];
-	 denom  = weight + 1.0f;
-
-	 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
-	 imageWeights[index] = denom;
+		 colors[index] = colors[index] * (weight/denom) + inColor * (1.0f/denom);
+		 imageWeights[index] = denom;
+	}else{
+		float weight = imageWeights[index];
+		float denom  = weight + pdfWeight;
+		colors[index] = colors[index] * (weight/denom) + pdfWeight * (1.0f/denom);
+		imageWeights[index] = denom;
+	}
   }
 }
 
