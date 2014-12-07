@@ -606,64 +606,73 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
     // - position of final vertex
     vertex lv = lightPaths[0].vert[0];
     glm::vec3 lightColor = lv.mat.color * lv.mat.emittance;
-    for(int li = 1; li < traceDepth; li ++){
-    	continue;
-    }
     float lightPDF = 1.0f;
-    for( int max = traceDepth - 1; max >+0; max--){
-		totalPDFWeight = lightPDF;
-    	inColor = lightColor;
-    	validRay = 0;
-    	v = eyePaths[index].vert[max];
-    	//check if can connect.  if no break
-    	 if(v.isValid == 1){
-    	//intersection checks:
-			float dist = glm::distance(lv.position, v.position);
-			float distToIntersect = dist;
-			thisRay.direction = glm::normalize(lv.position - v.position);
-			thisRay.origin = v.position;
+    for(int li = 1; li <= traceDepth; li ++){
+    	//connect light vertex to each eye vertex
+		for( int max = traceDepth - 1; max >+0; max--){
+			totalPDFWeight = lightPDF;
+			inColor = lightColor;
+			validRay = 0;
+			v = eyePaths[index].vert[max];
+			//check if can connect.  if no break
+			 if(v.isValid == 1){
+			//intersection checks:
+				float dist = glm::distance(lv.position, v.position);
+				float distToIntersect = dist;
+				thisRay.direction = glm::normalize(lv.position - v.position);
+				thisRay.origin = v.position;
 
-			int materialID = 0;                        //updated in intersectionTest
-			glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
-			distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
-			if(distToIntersect < dist){//hit something
-				material m = materials[materialID];
-				if(m.type != 9){
-					continue;
+				int materialID = 0;                        //updated in intersectionTest
+				glm::vec3 intersectPoint, intersectNormal; //updated in intersectionTest
+				distToIntersect = intersectionTest(geoms, numberOfGeoms, materialID, thisRay, distToIntersect, intersectNormal, intersectPoint);
+				if(distToIntersect < dist){//hit something
+					material m = materials[materialID];
+					if(m.type != 9){
+						continue;
+					}
 				}
-			}
-			//update inColor
-			inColor = getColorFromBSDF(v.inDirection, thisRay.direction, v.normal, inColor, v.mat);
-			//update Probability
-			pdfWeight = PDF(v.inDirection, thisRay.direction, v.normal, mat);
-			totalPDFWeight *= pdfWeight;
-			for(int vert = max - 1 ; vert >= 0; vert--){
-			  v = eyePaths[index].vert[vert];
-			  if(v.isValid == 1){
-				validRay = 1;
-				material mat = v.mat;
-				if(v.hitLight == 1){
-					inColor = mat.color * mat.emittance;
-					totalPDFWeight = 1.0f;//*= PDF(v.inDirection, v.outDirection, v.normal, v.mat);
-				}else{
-				  totalPDFWeight *= v.pdfWeight;
-				  //update BSDF color
-				  //BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
-				  //inColor     = v.directLight + BSDFcolor;
-				  inColor      = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+				//update inColor
+				inColor = getColorFromBSDF(v.inDirection, thisRay.direction, v.normal, inColor, v.mat);
+				//update Probability
+				pdfWeight = PDF(v.inDirection, thisRay.direction, v.normal, mat);
+				totalPDFWeight *= pdfWeight;
+				for(int vert = max - 1 ; vert >= 0; vert--){
+				  v = eyePaths[index].vert[vert];
+				  if(v.isValid == 1){
+					validRay = 1;
+					material mat = v.mat;
+					if(v.hitLight == 1){
+						inColor = mat.color * mat.emittance;
+						totalPDFWeight = 1.0f;//*= PDF(v.inDirection, v.outDirection, v.normal, v.mat);
+					}else{
+					  totalPDFWeight *= v.pdfWeight;
+					  //update BSDF color
+					  //BSDFcolor    = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+					  //inColor     = v.directLight + BSDFcolor;
+					  inColor      = getColorFromBSDF(v.inDirection, v.outDirection, v.normal, inColor, v.mat);
+
+					}
+				  }
+				}
+				if(validRay == 1){
+					//Update Pixel Color
+					float weight = imageWeights[index];
+					float denom  = weight + totalPDFWeight;
+					colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
+					imageWeights[index] = denom;
 
 				}
-			  }
+			 }
 			}
-			if(validRay == 1){
-				//Update Pixel Color
-				float weight = imageWeights[index];
-				float denom  = weight + totalPDFWeight;
-				colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
-				imageWeights[index] = denom;
-
+		// Update light vertex
+		if(li < traceDepth){
+			lv = lightPaths[0].vert[li];
+			if(lv.isValid == 0){
+				return; //unless we want to do the second pass on eye paths below
 			}
-		 }
+			lightColor = getColorFromBSDF(lv.inDirection, lv.outDirection, lv.normal, lightColor, lv.mat);
+			lightPDF *= lv.pdfWeight;
+		}
     }
     /*
 	validRay = 0;
@@ -672,9 +681,10 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 	for(int vert = max ; vert >= 0; vert--){
 	  v = eyePaths[index].vert[vert];
 	  if(v.isValid == 1){
-		validRay = 1;
+
 		material mat = v.mat;
 		if(v.hitLight == 1){
+			validRay = 1;
 		  //This vertex is on a light
 		  inColor = mat.color * mat.emittance;
 		}else{
@@ -695,7 +705,7 @@ __global__ void BiDirRenderColor(glm::vec2 resolution, glm::vec3* colors, float*
 	  colors[index] = colors[index] * (weight/denom) + inColor * (totalPDFWeight/denom);
 	  imageWeights[index] = denom;
 	}
-   */
+*/
   }
 }
 
