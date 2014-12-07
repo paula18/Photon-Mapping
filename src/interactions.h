@@ -283,8 +283,8 @@ __host__ __device__ void calculateSpecularBSDF(ray& thisRay, glm::vec3 intersect
 }
 
 __host__ __device__ float PDF(glm::vec3 viewDir, glm::vec3 lightDir, glm::vec3 normal, material mat){
-	if(mat.type == 0 || mat.type == 9){//diffuse
-		return PDFDiffuse(normal,viewDir);
+	if(mat.type == 0){ //|| mat.type == 9){//diffuse or light
+		return PDFDiffuse(normal,lightDir);
 	}else if(mat.type == 1){
 		return PDFSpecular(viewDir, lightDir, normal, 20);
 	}
