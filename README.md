@@ -116,6 +116,12 @@ BAD Solid Angle
 good Solid Angle
 
 ==============
+VIDEO 
+==============
+
+https://vimeo.com/113924073
+
+==============
 REFERENCES: 
 ==============
 * Robust Monte Carlo Methods for Light Transport Simulation – Eric Veach
