@@ -1,4 +1,5 @@
 MATERIAL 0				//white diffuse
+TYPE	    0
 RGB         1 1 1       
 SPECEX      0      
 SPECRGB     1 1 1      
@@ -11,10 +12,11 @@ RSCTCOEFF   0
 EMITTANCE   0
 
 MATERIAL 1 				//red diffuse
+TYPE	    0
 RGB         .63 .06 .04       
 SPECEX      0      
 SPECRGB     1 1 1      
-REFL        .2       
+REFL        0       
 REFR        0        
 REFRIOR     0       
 SCATTER     0        
@@ -23,6 +25,7 @@ RSCTCOEFF   0
 EMITTANCE   0
 
 MATERIAL 2 				//green diffuse
+TYPE	    0
 RGB         .15 .48 .09      
 SPECEX      0      
 SPECRGB     1 1 1      
@@ -35,9 +38,10 @@ RSCTCOEFF   0
 EMITTANCE   0
 
 MATERIAL 3 				//red glossy
-RGB         .63 .16 .04      
-SPECEX      0      
-SPECRGB     1 1 1       
+TYPE	    1
+RGB         .63 .06 .04      
+SPECEX      3      
+SPECRGB     1 .8 .8       
 REFL        .1       
 REFR        .9       
 REFRIOR     2       
@@ -46,33 +50,36 @@ ABSCOEFF    0 0 0
 RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 4 				//grey diffuse
-RGB         .75 .75 .75     
-SPECEX      0      
-SPECRGB     1 1 1      
+MATERIAL 4 				//green glossy
+TYPE	    0
+RGB         .15 .48 .09      
+SPECEX      3      
+SPECRGB     .8 1 .8      
 REFL        0       
 REFR        0        
-REFRIOR     0      
+REFRIOR     0       
 SCATTER     0        
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 5 				//glass
-RGB         0 0 0    
-SPECEX      0      
-SPECRGB     1 1 1      
-REFL        0       
-REFR        1        
-REFRIOR     2.2       
+MATERIAL 5 				//gray glossy
+TYPE	    1
+RGB         .75 .75 .75      
+SPECEX      5      
+SPECRGB     1 1 1     
+REFL        .1       
+REFR        0        
+REFRIOR     2.6       
 SCATTER     0        
-ABSCOEFF    .02 5.1 5.7      
-RSCTCOEFF   13
+ABSCOEFF    0 0 0      
+RSCTCOEFF   0
 EMITTANCE   0
 
-MATERIAL 6 				//green glossy
-RGB         .15 .48 .09      
-SPECEX      0      
+MATERIAL 6 				//gray nearMirror
+TYPE	    1
+RGB         .5 .5 .5      
+SPECEX      1000      
 SPECRGB     1 1 1     
 REFL        .1       
 REFR        0        
@@ -83,6 +90,7 @@ RSCTCOEFF   0
 EMITTANCE   0
 
 MATERIAL 7				//light
+TYPE	    9
 RGB         1 1 1       
 SPECEX      0      
 SPECRGB     0 0 0       
@@ -95,6 +103,7 @@ RSCTCOEFF   0
 EMITTANCE   1
 
 MATERIAL 8				//light
+TYPE	    9
 RGB         1 1 1       
 SPECEX      0      
 SPECRGB     0 0 0       
@@ -104,9 +113,10 @@ REFRIOR     0
 SCATTER     0        
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
-EMITTANCE   1.5
+EMITTANCE   5
 
 MATERIAL 9				//light
+TYPE	    9
 RGB         1 1 1       
 SPECEX      0      
 SPECRGB     0 0 0       
@@ -116,13 +126,13 @@ REFRIOR     0
 SCATTER     0        
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
-EMITTANCE   15
+EMITTANCE   1
 
 CAMERA
 RES         800 800
 FOVY        25
-ITERATIONS  5000
-FILE        test.bmp
+ITERATIONS  100
+FILE        DEBUG.bmp
 frame 0
 EYE         0 4.5 12
 VIEW        0 0 -1
@@ -132,7 +142,7 @@ APERATURE   1500
 
 OBJECT 0
 cube
-material 0
+material 6
 frame 0
 TRANS       0 0 0
 ROTAT       0 0 90
@@ -156,7 +166,7 @@ SCALE       .01 10 10
 
 OBJECT 3
 cube
-material 1
+material 3
 frame 0
 TRANS       -5 5 0
 ROTAT       0 0 0
@@ -164,7 +174,7 @@ SCALE       .01 10 10
 
 OBJECT 4
 cube
-material 2
+material 4
 frame 0
 TRANS       5 5 0
 ROTAT       0 0 0
@@ -172,25 +182,25 @@ SCALE       .01 10 10
 
 OBJECT 5
 sphere
-material 4
+material 6
 frame 0
-TRANS       0 4 -1
-ROTAT       0 180 0
-SCALE       4 4 4
+TRANS       0 2 -2
+ROTAT       45 180 45
+SCALE       3.5 3.5 3.5
 
 
 OBJECT 6
-cube
-material 0 
+sphere
+material 9 
 frame 0
-TRANS       0 10 0
+TRANS       0 8.5 0
 ROTAT       0 0 90
-SCALE       .3 7 7
+SCALE       1 1 1
 
-//OBJECT 7
-//cube
-//material 9 
-//frame 0
-//TRANS       0 4.5 12
-//ROTAT       0 0 0
-//SCALE       4 4 .3
+OBJECT 7
+cube
+material 6
+frame 0
+TRANS       0 5 0
+ROTAT       45 180 45
+SCALE       1 1 1

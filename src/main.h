@@ -39,6 +39,7 @@ int targetFrame;
 int iterations;
 bool finishedRender;
 bool singleFrameMode;
+int renderType = 2; //Multiple Importance Sampling as Default
 
 //-------------------------------
 //------------GL STUFF-----------

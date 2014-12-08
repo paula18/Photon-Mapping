@@ -1,0 +1,34 @@
+# General
+builds/
+
+# Compiled objects
+*.o
+*.obj
+
+# Compiled dynamic libraries
+*.so
+
+# Windows specific
+[Rr]elease/
+[Dd]ebug/
+*.suo
+*.pdb
+*.sdf
+*.opensdf
+*.user
+*.deps
+*.ipch
+
+# CUDA built deps
+windows/src/
+
+# OSX specific
+.DS_Store
+*/.DS_Store
+
+# VIM swap files
+*.swp
+
+# Exceptions
+!external/lib/*/*.lib
+!external/bin/*

@@ -24,6 +24,7 @@
 #define EPSILON                     .000000001
 #define ZERO_ABSORPTION_EPSILON     0.00001
 #define RAY_BIAS_AMOUNT             0.0002
+#define INV_PI                      0.3183099
 
 namespace utilityCore {
     extern float clamp(float f, float min, float max);
