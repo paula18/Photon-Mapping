@@ -41,6 +41,7 @@ Veech large DL
 
 ![Veech large PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_PT.0.bmp)
 Veech large PT
+
 These sampling techniques differ on the variance, depending on the radius of the light source and the shininess of the plate. For example, as the images show, for small light and almost diffuse plate, sampling the light source gives a better result than sampling the BSDF. The opposite occurs for big light sources and shiny materials. 
 The following images show the same test, however now instead of sampling one of each technique, we combine them and weight them to decrease the variance of the previous sampling methods. With MIS we choose which technique is better in each case, and weight this “right” technique more to achieve a more accurate result.   
 
