@@ -15,40 +15,68 @@ We started our project by adding Multiple Importance Sampling to the forward pat
 ==============
 MULTIPLE IMPORTANCE SAMPLING
 ==============
-The way path tracing works is by shooting a ray from the camera into the scene and accumulate the colors at every hit point until a light source is reached. This method gives nice results for certain scenes, however it is not an efficient way for many other types of scenes (as we will show later.) Image you have a very small light positioned very far away from the scene. The probability of shooting a ray that is going to end up hitting that small light source is minimal. Here is where MIS comes into play. A more efficient way of calculating the final color of a pixel is by accumulating the color at every hit point but also shooting rays in the direction of the light source. That is sampling both the BSDF and the light. With MIS, we weight two different sampling methods using the balance heuristic and calculate the final color by weighting the contribution of both techniques. 
+The way path tracing works is by shooting a ray from the camera into the scene and accumulate the colors at every hit point until a light source is reached. This method gives nice results for certain scenes, however it is not an efficient way for many other types of scenes (as we will show later.) Imagine you have a very small light positioned very far away from the scene. The probability of shooting a ray that is going to end up hitting that small light source is minimal. Here is where MIS comes into play. A more efficient way of calculating the final color of a pixel is by accumulating the color at every hit point but also shooting rays in the direction of the light source. That is sampling both the BSDF and the light. With MIS, we weight two different sampling methods using the balance heuristic and calculate the final color by weighting the contribution of both techniques. 
 To test the effectivity of MIS we rendered three images containing fives shiny plates positioned at different angles and a light source that reflects on them. The planes range in specularity from most specular (back) to almost diffuse (front). The lights are all of the same power and color, but vary in size (radius of 0.2, 0.75, 2 and 3). The following images show the difference between sampling the BRDF and sampling the light sources. 
 
 
 ![Veech Small DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_SmallLight_DL.0.bmp)
-![Veech Small PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_SmallLight_PT.0.bmp)
-![Veech med small DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light075_DirectLighting.0.bmp)
-![Veech med small PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light075_PT.0.bmp)
-![Veech med large DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_LargeLight_DL.0.bmp)
-![Veech med large PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_LargeLight_PT.0.bmp)
-![Veech large DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_DirectLighting.0.bmp)
-![Veech large PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_PT.0.bmp)
+Veech Small DL
 
+![Veech Small PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_SmallLight_PT.0.bmp)
+Veech Small PT
+![Veech med small DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light075_DirectLighting.0.bmp)
+Veech med small DL
+
+![Veech med small PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light075_PT.0.bmp)
+Veech med small PT
+
+![Veech med large DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_LargeLight_DL.0.bmp)
+Veech med large DL
+
+![Veech med large PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_LargeLight_PT.0.bmp)
+Veech med large PT
+
+![Veech large DL](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_DirectLighting.0.bmp)
+Veech large DL
+
+![Veech large PT](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_PT.0.bmp)
+Veech large PT
 These sampling techniques differ on the variance, depending on the radius of the light source and the shininess of the plate. For example, as the images show, for small light and almost diffuse plate, sampling the light source gives a better result than sampling the BSDF. The opposite occurs for big light sources and shiny materials. 
 The following images show the same test, however now instead of sampling one of each technique, we combine them and weight them to decrease the variance of the previous sampling methods. With MIS we choose which technique is better in each case, and weight this “right” technique more to achieve a more accurate result.   
 
 ![bidirectional small](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_SmallLight_BI.0.bmp)
+bidirectional small
+
 ![bidirectional med small](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light075_BPT.0.bmp)
+bidirectional med small
+
 ![bidirectional med large](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_LargeLight_BI.0.bmp)
+bidirectional med large
+
 ![bidirectional large](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/VEECH_Light350_BPT.0.bmp)
+bidirectional large
 
 ==============
 COMPARISON WITH FORWARD PATH TRACING
 ==============
 To show the robustness of our implementation we render a complex scene of 14 specular objects with 2, 10, 100 and 1000 iterations. The following image (only 2 iterations) shows the fast convergence of our implementation. 
 ![BPT Performance 2 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/performanceTestingBPT2.0.bmp)
+BPT Performance 2 iters
 
 The next picture (1000 iterations) was rendered to compare final times with forward path tracer, but this render was unnecessary for other purposes, since the image converges at around 100-200 iterations. We choose a trace depth of 4, and it is clearly shown in the pictures that forward path tracing is not able to render such scene in less than 1000 iterations. Even though the time per iteration is faster for forward path tracing (126.283 vs. 460.105) it is clear that BPT converges faster. 
 ![BPT Performance 1000 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/performanceTestingBPT1000.0.bmp)
-![FPT Performance 1000 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/performanceTestingPT1000.0.bmp)
+BPT Performance 1000 iters
+
+![FPT Performance 1000 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/performanceTestingPT1000.0.bmp)
+FPT Performance 1000 iters
+
 
 Here is the same comparison with 100 iterations.
 ![BPT Performance 100 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/performanceTestingBPT100.0.bmp)
-![FPT Performance 100 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/master/performanceTestingPT100.0.bmp)
+BPT Performance 100 iters
+
+![FPT Performance 100 iters](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/performanceTestingPT100.0.bmp)
+FPT Performance 100 iters
 
 Here is another scene we rendered.  This time we included Depth of Field as well, which is virtually free for both the Forward and Bidirectional PathTracer.
 This scene has 
@@ -81,7 +109,10 @@ DEBUG VIEWS
 ==============
 During the process we noticed we were getting some strange artifacts in our image.  This debug view renders the solid Angle calculated at each position.  Notice the band on the sphere and the ceiling in the incorrect image as compared to the correct one.  This helped us find a wildly incorrect transformation in our implementation.
 ![BAD Solid Angle](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/DEBUG_SolidAngleBug.bmp)
-![good Solid Angle](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/DEBUG_SolidAngleBug.bmp)
+BAD Solid Angle
+
+![good Solid Angle](https://raw.githubusercontent.com/paula18/Photon-Mapping/forwardMIS/DEBUG_solidAngle.bmp)
+good Solid Angle
 
 ==============
 REFERENCES: 
